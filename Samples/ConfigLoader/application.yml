@@ -1,0 +1,4 @@
+myconfig:
+ name: "Config Loader"
+ desc: "Sample program displaying how a configuration file can be read and injected into a reader that will print out the contents of the file"
+ version: "1.0.0"
