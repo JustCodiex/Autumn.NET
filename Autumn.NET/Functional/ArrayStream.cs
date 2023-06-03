@@ -3,7 +3,7 @@
 namespace Autumn.Functional;
 
 /// <summary>
-/// Represents a streaming framework for arrays.
+/// Represents a streaming instance for arrays.
 /// </summary>
 public abstract class ArrayStream {
 
@@ -39,7 +39,7 @@ public abstract class ArrayStream {
 }
 
 /// <summary>
-/// Represents a streaming framework for arrays of a specific type.
+/// Represents a streaming instance for arrays of a specific type.
 /// </summary>
 /// <typeparam name="T">The type of elements in the array.</typeparam>
 public sealed class ArrayStream<T> : ArrayStream {
@@ -146,6 +146,15 @@ public sealed class ArrayStream<T> : ArrayStream {
             node = node.Next;
         }
         return (T[])result;
+    }
+
+    public IDictionary<K, T> ToDictionary<K>(Func<T, K> keymapper) where K : notnull {
+        Dictionary<K, T> result = new Dictionary<K, T>();
+        var collapsed = this.Collapse();
+        for (int i = 0; i < collapsed.Length; i++) {
+            result[keymapper(collapsed[i])] = collapsed[i];
+        }
+        return result;
     }
 
     /// <summary>

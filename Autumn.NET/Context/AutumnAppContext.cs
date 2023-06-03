@@ -81,6 +81,10 @@ public sealed class AutumnAppContext {
         foreach (var type in interfaces) {
             AssociateComponent(new ComponentIdentifier(type.FullName!, component), creator);
         }
+        var baseType = component.BaseType;
+        if (baseType is not null && baseType != typeof(object)) {
+            AssociateComponent(new ComponentIdentifier(baseType.FullName!, component), creator);
+        }
     }
 
     private void AssociateComponent(ComponentIdentifier identifier, TypeCreator creator) {
@@ -92,8 +96,10 @@ public sealed class AutumnAppContext {
     }
 
     public void RegisterComponent<T>(T component) where T : notnull {
-        RegisterComponent(typeof(T));
-        var identifier = ComponentIdentifier.DefaultIdentifier(typeof(T));
+        var t = typeof(T);
+        var componentType = t.IsInterface || t.IsAbstract ? component.GetType() : t;
+        RegisterComponent(componentType);
+        var identifier = ComponentIdentifier.DefaultIdentifier(componentType);
         singletonFactory.RegisterSingleton(identifier, component);
     }
 
@@ -101,8 +107,15 @@ public sealed class AutumnAppContext {
     /// Retrieves an array of all registered service types.
     /// </summary>
     /// <returns>An array of registered service types.</returns>
-    internal Type[] GetServices()
-        => services.Values.Aggregate((x, y) => x.Union(y).ToHashSet()).Select(x => x.Type).ToArray();
+    internal Type[] GetServices() {
+        HashSet<Type> services = new HashSet<Type>();
+        foreach (var (_, creators) in this.services) {
+            foreach (var creator in creators) {
+                services.Add(creator.Type);
+            }
+        }
+        return services.ToArray();
+    }
 
     /// <summary>
     /// Registers a configuration instance for a specific type.
@@ -221,6 +234,9 @@ public sealed class AutumnAppContext {
             if (qualifiedByName.Count == 1) {
                 return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type));
             }
+            if (typesByType.Count == 1) {
+                return typesByType.First().Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(typesByType.First().Type));
+            }
             throw new NotImplementedException();
         }
         return null; // TODO: Chechk if null
@@ -338,14 +354,11 @@ public sealed class AutumnAppContext {
     }
 
     private IComponentFactory GetComponentFactory(Type type) {
-        if (type.GetCustomAttribute<ServiceAttribute>() is not null) {
-            return singletonFactory;
-        }
         if (type.GetCustomAttribute<ComponentAttribute>() is ComponentAttribute componentAttribute) {
-            // Return proxy or smth
+            // Return proxy or smth (Check if component should be instantiated on every call to get component)
             return singletonFactory;
         }
-        throw new Exception();
+        return singletonFactory;
     }
 
 }

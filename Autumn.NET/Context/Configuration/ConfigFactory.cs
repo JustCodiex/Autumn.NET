@@ -45,10 +45,10 @@ public sealed class ConfigFactory {
                 }
                 break;
             case YamlScalarNode scalarNode:
-                if (double.TryParse(scalarNode.Value!, CultureInfo.InvariantCulture, out double d)) {
-                    cfg[path] = d;
-                } else if (int.TryParse(scalarNode.Value!, out int i)) {
+                if (int.TryParse(scalarNode.Value!, out int i)) {
                     cfg[path] = i;
+                } else if (double.TryParse(scalarNode.Value!, CultureInfo.InvariantCulture, out double d)) {
+                    cfg[path] = d;
                 } else if (scalarNode.Value?.ToLower() is "true") {
                     cfg[path] = true;
                 } else if (scalarNode.Value?.ToLower() is "false") {

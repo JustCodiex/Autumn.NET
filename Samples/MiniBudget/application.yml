@@ -1,0 +1,8 @@
+autumn:
+    datasource:
+        type: postgres
+        url: "localhost"
+        port: 5434
+        database: autumn_postgres
+        username: postgres
+        password: postgres

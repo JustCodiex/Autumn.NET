@@ -84,14 +84,6 @@ public sealed class AutumnApplication {
         activeApps.Add(app);
         mainApp ??= app;
 
-        CommandLineArgs cmdArgs = new CommandLineArgs(args);
-        if (!cmdArgs.Parse()) {
-            // Error?
-        }
-
-        // Register app context
-        app.AppContext.RegisterComponent(cmdArgs);
-
         // Get namespace
         var subTypes = mainClassType.Assembly.GetTypes();
         if (!string.IsNullOrEmpty(mainClassType.Namespace)) {
@@ -100,11 +92,23 @@ public sealed class AutumnApplication {
 
         // Load it up
         ContextLoader loader = new ContextLoader();
+        loader.LoadAssemblyContext();
         loader.LoadContext(app.AppContext, subTypes);
+
+        // Parse arguments
+        CommandLineArgs cmdArgs = new CommandLineArgs(args);
+        if (!cmdArgs.Parse()) {
+            // Error?
+        }
+
+        // Register app context
+        app.AppContext.RegisterComponent(cmdArgs);
 
         // Create services
         var services = app.AppContext.GetServices();
         List<(object, MethodInfo?, EndpointAttribute?)> endpointsServices = new();
+        object? entryPoint = mainClass;
+        MethodInfo? entryPointMethod = mainClassType.GetMethod("Start", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         foreach (var serviceKlass in services) {
             var service = app.AppContext.GetInstanceOf(serviceKlass) ?? throw new Exception();
             var starters = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
@@ -119,7 +123,16 @@ public sealed class AutumnApplication {
             foreach (var (endpoint, endpointDesc) in endpoints) {
                 endpointsServices.Add((service, endpoint, endpointDesc));
             }
-            // TODO: anything else?
+            var entryPointMethods = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                .Select(x => (x, x?.GetCustomAttribute<EntryPointAttribute>()))
+                .Where(x => x.Item2 is not null).ToArray();
+            if (entryPointMethods.Length == 1) {
+                if (entryPointMethod is not null) {
+                    throw new MultipleEntryPointsException("Multiple entry points detected!");
+                }
+                entryPoint = service;
+                entryPointMethod = entryPointMethods[0].x;
+            }
         }
 
         // Init main class
@@ -133,6 +146,7 @@ public sealed class AutumnApplication {
             foreach (var endpoints in endpointsServices) {
                 app.httpServer.RegisterEndpoint(endpoints.Item1, endpoints.Item2!, endpoints.Item3!);
             }
+            app.AppContext.RegisterComponent(app.httpServer); // Make it visible to potential consumers (TODO: Make a method that applies this retroactively)
             Thread httpListenerThread = new Thread(app.httpServer.Start);
             httpListenerThread.Start();
             app.threads.Add(httpListenerThread);
@@ -140,6 +154,10 @@ public sealed class AutumnApplication {
 
         // Register hook into ctrl+c
         //AppDomain.CurrentDomain.
+
+        if (entryPoint is not null && entryPointMethod is not null) {
+            entryPointMethod.Invoke(entryPoint, Array.Empty<object>());
+        }
 
         // Join
         foreach (var thread in app.threads) {

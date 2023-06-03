@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Autumn.NET.Database.Postgres\Autumn.NET.Database.Postgres.csproj" />
+    <ProjectReference Include="..\..\Autumn.NET.Database\Autumn.NET.Database.csproj" />
+    <ProjectReference Include="..\..\Autumn.NET\Autumn.NET.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Persistence\MySql\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="application.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
