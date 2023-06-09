@@ -10,4 +10,5 @@ public class MultipleEntryPointsException : Exception {
     /// </summary>
     /// <param name="message">The error message that explains the reason for the exception.</param>
     public MultipleEntryPointsException(string message) : base(message) {}
+
 }

@@ -18,7 +18,7 @@ internal sealed class ContextLoader {
     private readonly ConfigFactory configFactory;
     private readonly Dictionary<Type, AutumnTemplate> templates;
     private readonly Dictionary<Type, AutumnTemplate> templateImplementations;
-    private List<AutumnLibraryContextLoader> libraryContextLoaders;
+    private readonly List<AutumnLibraryContextLoader> libraryContextLoaders;
 
     internal ContextLoader(params string[] propertySources) { 
         this.propertySources = propertySources

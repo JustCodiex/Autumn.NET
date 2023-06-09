@@ -4,6 +4,9 @@ using Npgsql;
 
 namespace Autumn.Database.Postgres;
 
+/// <summary>
+/// Represents a PostgreSQL implementation of the <see cref="DatabaseCommand"/> class.
+/// </summary>
 public sealed class PostgresDatabaseCommand : DatabaseCommand {
 
     private readonly string commandText;
@@ -11,6 +14,11 @@ public sealed class PostgresDatabaseCommand : DatabaseCommand {
     private readonly NpgsqlCommand command;
     private readonly int arguments;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PostgresDatabaseCommand"/> class with the specified command text and PostgreSQL connection.
+    /// </summary>
+    /// <param name="commandText">The command text.</param>
+    /// <param name="connection">The PostgreSQL connection.</param>
     public PostgresDatabaseCommand(string commandText, NpgsqlConnection connection) { 
         this.connection = connection;
         (this.commandText, this.arguments) = GetCommandText(commandText);
@@ -38,21 +46,25 @@ public sealed class PostgresDatabaseCommand : DatabaseCommand {
         return (sb.ToString(), count);
     }
 
+    /// <inheritdoc/>
     public override void Dispose() {
         ((IDisposable)command).Dispose();
     }
 
+    /// <inheritdoc/>
     public override QueryResult Execute() {
         return new PostgresQueryResult(this.command.ExecuteReader());
     }
 
+    /// <inheritdoc/>
     public override int ExecuteUpdate() => this.command.ExecuteNonQuery();
 
+    /// <inheritdoc/>
     public override void SetArgument(int index, object? value) {
         if (index < 0) {
-            throw new IndexOutOfRangeException("index");
+            throw new ArgumentOutOfRangeException(nameof(index));
         }
-        if (index >= this.arguments) { throw new ArgumentOutOfRangeException("index"); }
+        if (index >= this.arguments) { throw new ArgumentOutOfRangeException(nameof(index)); }
         string argName = $"@arg{index}";
         switch (value) {
             case string str:

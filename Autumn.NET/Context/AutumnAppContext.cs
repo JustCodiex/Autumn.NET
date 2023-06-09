@@ -92,7 +92,11 @@ public sealed class AutumnAppContext {
             keyTypes.Add(creator);
             return;
         }
-        components.Add(identifier.ComponentQualifier, new () { creator });
+        if (creator.Type.IsAbstract || creator.Type.IsInterface) {
+            components.Add(identifier.ComponentQualifier, new()); // Could go very bad if we tried to make an instance of an abstract/interface class
+        } else {
+            components.Add(identifier.ComponentQualifier, new() { creator });
+        }
     }
 
     public void RegisterComponent<T>(T component) where T : notnull {
@@ -359,6 +363,23 @@ public sealed class AutumnAppContext {
             return singletonFactory;
         }
         return singletonFactory;
+    }
+
+    public object[] GetComponents(Type type) {
+        if (components.TryGetValue(type.FullName!, out var creators)) {
+            var instances = creators.Select(x => x.Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(x.Type))).ToArray();
+            return instances;
+        }
+        return Array.Empty<object>();
+    }
+
+    public T[] GetComponents<T>() {
+        object[] components = GetComponents(typeof(T));
+        T[] result = new T[components.Length];
+        for (int i = 0; i < components.Length;i++) {
+            result[i] = (T)components[i];
+        }
+        return result;
     }
 
 }

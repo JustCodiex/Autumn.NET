@@ -7,15 +7,23 @@ using Autumn.Database.Relational;
 
 namespace Autumn.Database.Lib;
 
+/// <summary>
+/// The database-specific implementation of the application context loader in the Autumn framework.
+/// </summary>
 [AutumnContextLoader]
-public class DatabaseLibraryContext {
+public class DatabaseApplicationContext {
 
     private readonly Dictionary<Type, GeneratedRowMapper> rowmappers;
 
-    public DatabaseLibraryContext() { 
+    public DatabaseApplicationContext() { 
         this.rowmappers = new Dictionary<Type, GeneratedRowMapper>();
     }
 
+    /// <summary>
+    /// Retrieves the row mapper for the specified type from the application context.
+    /// </summary>
+    /// <typeparam name="T">The target type.</typeparam>
+    /// <returns>The row mapper function.</returns>
     public RowMapper<T> GetRowMapper<T>() {
         if (rowmappers.TryGetValue(typeof(T), out var rowMapper)) {
             return (QueryResult r, int i) => {
@@ -28,9 +36,14 @@ public class DatabaseLibraryContext {
         throw new KeyNotFoundException();
     }
 
-    public static void LoadContext(AutumnAppContext context, Type[] types) {
+    /// <summary>
+    /// Loads the database-related components into the application context.
+    /// </summary>
+    /// <param name="context">The AutumnAppContext instance.</param>
+    /// <param name="types">The types to process for database-related components.</param>
+    public static void LoadContext(AutumnAppContext context, Type[] types) { // This method is called automatically because of the AutumnContextLoader attribute
 
-        DatabaseLibraryContext databaseLibraryContext = new DatabaseLibraryContext();
+        DatabaseApplicationContext databaseLibraryContext = new DatabaseApplicationContext();
 
         for (int i = 0; i < types.Length; i++) {
 
@@ -41,7 +54,7 @@ public class DatabaseLibraryContext {
 
         }
 
-        // Register
+        // Register the database context as a component in the application context
         context.RegisterComponent(databaseLibraryContext);
 
     }
@@ -57,7 +70,7 @@ public class DatabaseLibraryContext {
                 int ordinal = result.GetColumnIndex(string.IsNullOrEmpty(column.Item2.ColumnName) ? column.x.Name : column.Item2.ColumnName);
                 column.x.SetValue(instance, result.GetColumnValue(column.x.PropertyType, ordinal));
             }
-            return instance;
+            return instance!;
         };
     }
 

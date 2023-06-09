@@ -6,11 +6,18 @@ using Npgsql;
 
 namespace Autumn.Database.Postgres;
 
+/// <summary>
+/// Represents a PostgreSQL data source implementation of <see cref="DataSource"/>.
+/// </summary>
 [AutumnTemplateImplementation(typeof(DataSource))]
 public class PostgresDataSource : DataSource {
 
     private readonly NpgsqlConnection connection;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PostgresDataSource"/> class.
+    /// </summary>
+    /// <param name="propertySource">The property source for retrieving connection details.</param>
     public PostgresDataSource([Inject] StaticPropertySource propertySource) {
 
         string connectionurl = (string)propertySource.GetValue("autumn.datasource.url");
@@ -29,6 +36,7 @@ public class PostgresDataSource : DataSource {
 
     }
 
+    /// <inheritdoc />
     public override DatabaseCommand CreateCommand(string commandText) {
         return new PostgresDatabaseCommand(commandText, connection);
     }

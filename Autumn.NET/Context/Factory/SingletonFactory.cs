@@ -7,7 +7,9 @@ internal class SingletonFactory : IComponentFactory {
 
     public SingletonFactory(AutumnAppContext context) {
         this.appContext = context;
-        this.componentInstances = new Dictionary<ComponentIdentifier, object>();
+        this.componentInstances = new Dictionary<ComponentIdentifier, object>() {
+            [new ComponentIdentifier(typeof(AutumnAppContext).FullName!, typeof(AutumnAppContext))] = context
+        };
     }
 
     public void CreateFactory(ComponentIdentifier identifier) {
