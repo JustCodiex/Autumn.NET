@@ -45,6 +45,15 @@ public abstract class DatabaseTemplate {
     public abstract IList<T> Query<T>(string sql);
 
     /// <summary>
+    /// Executes a parameterized SQL query and returns a list of result objects of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the result objects.</typeparam>
+    /// <param name="sql">The parameterized SQL query to execute.</param>
+    /// <param name="args">The arguments for the parameterized SQL query.</param>
+    /// <returns>The list of result objects.</returns>
+    public abstract IList<T> Query<T>(string sql, params object?[] args);
+
+    /// <summary>
     /// Executes a SQL query and returns a list of result objects of type <typeparamref name="T"/> using the provided <paramref name="mapper"/>.
     /// </summary>
     /// <typeparam name="T">The type of the result objects.</typeparam>

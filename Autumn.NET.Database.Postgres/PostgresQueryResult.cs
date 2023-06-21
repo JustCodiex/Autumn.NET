@@ -43,6 +43,8 @@ public sealed class PostgresQueryResult : QueryResult {
             return reader.GetString(columnIndex);
         } else if (type == typeof(int)) {
             return reader.GetInt32(columnIndex);
+        } else if (type == typeof(long)) {
+            return reader.GetInt64(columnIndex);
         } else if (type == typeof(decimal)) {
             return (decimal)reader.GetDouble(columnIndex);
         } else if (type == typeof(DateOnly)) {

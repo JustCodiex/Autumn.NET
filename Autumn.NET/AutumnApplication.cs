@@ -2,6 +2,7 @@
 using System.Reflection;
 
 using Autumn.Annotations;
+using Autumn.Annotations.Library;
 using Autumn.Arguments;
 using Autumn.Context;
 using Autumn.Http;
@@ -76,6 +77,14 @@ public sealed class AutumnApplication {
     /// <param name="args">The command-line arguments passed to the application.</param>
     public static void Run<T>(T main, params string[] args) where T : class
         => RunInternal(main, typeof(T), args);
+
+    /// <summary>
+    /// Runs the Autumn application using the specified entry point instance.
+    /// </summary>
+    /// <param name="main">The instance representing the entry point of the application.</param>
+    /// <param name="args">The command-line arguments passed to the application.</param>
+    public static void Run(object main, params string[] args) 
+        => RunInternal(main, main.GetType(), args);
 
     private static void RunInternal(object? mainClass, Type mainClassType, params string[] args) {
 
@@ -152,6 +161,12 @@ public sealed class AutumnApplication {
             app.threads.Add(httpListenerThread);
         }
 
+        // Get additional application loaders
+        var appLoaders = loader.ApplicationLoaders;
+        foreach (var appLoader in appLoaders) {
+            InvokeAppLoader(mainClass, mainClassType, appLoader.ClassTarget, appLoader.LoaderAttribute, app.AppContext, subTypes);
+        }
+
         // Register hook into ctrl+c
         //AppDomain.CurrentDomain.
 
@@ -164,6 +179,27 @@ public sealed class AutumnApplication {
             try {
                 thread.Join();
             } catch { }
+        }
+
+    }
+
+    private static void InvokeAppLoader(object? mainKlass, Type mainKlassType, Type appLoader, AutumnApplicationLoaderAttribute appLoaderConfig, 
+        AutumnAppContext appContext, Type[] subTypes) {
+
+        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        Type[] parameters = { typeof(object), typeof(AutumnAppContext), typeof(Type[]) };
+        var loader = appLoader.GetMethod("LoadApplication", flags, parameters);
+        if (loader is null) {
+            flags |= BindingFlags.Static;
+            loader = appLoader.GetMethod("LoadApplication", flags, parameters);
+            if (loader is null) {
+                return;
+            }
+            loader.Invoke(null, new object[] { mainKlassType, appContext, subTypes });
+        } else {
+            var instance = Activator.CreateInstance(appLoader) ?? throw new Exception();
+            appContext.InitialiseContextObject(instance, appLoader);
+            loader.Invoke(instance, new[] { mainKlass, appContext, subTypes });
         }
 
     }

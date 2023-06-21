@@ -1,0 +1,54 @@
+﻿<UserControl x:Class="Budget.Pages.View.CreateTransaction"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Budget.Pages.View"
+             mc:Ignorable="d" 
+             d:DesignHeight="500" d:DesignWidth="800"
+             Background="#F5F5F5">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="New Transaction" FontSize="32" FontWeight="Bold" Foreground="#5D1049" />
+
+        <TextBlock Grid.Row="1" Margin="10,10,0,0" Text="Account" FontSize="16"/>
+        <ComboBox x:Name="AccountComboBox" Grid.Row="1" Margin="10,30,10,10" Padding="10" FontSize="16" 
+                  ItemsSource="{Binding Accounts}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                  SelectedItem="{Binding AccountId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <Grid Grid.Row="2" Margin="10,10,10,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="Amount" FontSize="16"/>
+            <TextBox x:Name="AmountTextBox" Grid.Column="0" Margin="0,20,10,0" Padding="10" FontSize="16" 
+                     Text="{Binding Amount, Mode=TwoWay}" />
+
+            <TextBlock Grid.Column="1" Text="Currency" FontSize="16" Margin="10,0,0,0"/>
+            <ComboBox x:Name="CurrencyComboBox" Grid.Column="1" Margin="10,20,0,0" Padding="10" FontSize="16" 
+                      ItemsSource="{Binding Currencies}"
+                      SelectedItem="{Binding Currency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+        </Grid>
+
+        <TextBlock Grid.Row="3" Margin="10,10,0,0" Text="Description" FontSize="16"/>
+        <TextBox x:Name="DescriptionTextBox" Grid.Row="3" Margin="10,30,10,10" Padding="10" FontSize="16" 
+                 Text="{Binding Description, Mode=TwoWay}" />
+
+        <TextBlock Grid.Row="4" Margin="10,10,0,0" Text="Date" FontSize="16"/>
+        <DatePicker x:Name="DateDatePicker" Grid.Row="4" Margin="10,30,10,10" Padding="10" FontSize="16" 
+                    SelectedDate="{Binding Date, Mode=TwoWay}" />
+
+        <Button Grid.Row="5" Content="Add Transaction" Margin="10,10,10,0" Padding="10" FontSize="16" 
+                Background="#5D1049" Foreground="White" Click="AddTransactionButton_Click" />
+    </Grid>
+</UserControl>

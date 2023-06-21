@@ -77,16 +77,25 @@ public sealed class PostgresDatabaseCommand : DatabaseCommand {
                     Value = dec
                 });
                 break;
+            case int i32:
+                this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Integer) {
+                    Value = i32
+                });
+                break;
+            case long i64:
+                this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Bigint) {
+                    Value = i64
+                });
+                break;
             case DateOnly dateOnly:
                 this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Timestamp) {
                     Value = dateOnly.ToDateTime(TimeOnly.MinValue)
                 });
                 break;
             case null:
-
-                break;
+                throw new NotImplementedException();
             default:
-                throw new NotSupportedException();
+                throw new NotSupportedException($"Unsupported type: {value.GetType()}");
         }
     }
 

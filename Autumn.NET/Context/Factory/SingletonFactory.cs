@@ -16,13 +16,11 @@ internal class SingletonFactory : IComponentFactory {
         return;
     }
 
-    public object GetComponent(ComponentIdentifier identifier) {
+    public object GetComponent(ComponentIdentifier identifier, object[] args) {
         if (componentInstances.TryGetValue(identifier, out object? singleton)) {
             return singleton;
         }
-        var component = appContext.CreateContextObject(identifier.ComponentInstanceType) ?? throw new Exception();
-        componentInstances.Add(identifier, component);
-        return component;
+        return appContext.CreateContextObject(identifier.ComponentInstanceType, x => componentInstances.Add(identifier, x), args) ?? throw new Exception();
     }
 
     public bool HasSingleton(ComponentIdentifier componentIdentifier) {

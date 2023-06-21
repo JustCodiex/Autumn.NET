@@ -1,0 +1,31 @@
+﻿<Window x:Class="Budget.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Budget" xmlns:model="clr-namespace:Budget.Pages.Model"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="600" Width="1200">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Background="#2d3436" Grid.Column="0">
+            <ListBox x:Name="NavigationListBox" Background="#2d3436" 
+                     Foreground="White" BorderBrush="{x:Null}" Padding="10"
+                     SelectionMode="Extended" SelectionChanged="NavigationListBox_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="16"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <Border Grid.Column="1" Padding="10">
+            <ContentPresenter x:Name="ContentFrame"/>
+        </Border>
+    </Grid>
+</Window>

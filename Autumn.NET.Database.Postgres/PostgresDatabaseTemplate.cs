@@ -33,6 +33,13 @@ public class PostgresDatabaseTemplate : DatabaseTemplate {
         return this.QueryInternal(sql, rowmapper, Array.Empty<object>());
     }
 
+
+    /// <inheritdoc/>
+    public override IList<T> Query<T>(string sql, params object?[] args) {
+        var rowmapper = this.Context.GetRowMapper<T>();
+        return this.QueryInternal(sql, rowmapper, args);
+    }
+
     /// <inheritdoc/>
     public override IList<T> Query<T>(string sql, RowMapper<T> mapper) 
         => this.QueryInternal(sql, mapper, Array.Empty<object>());

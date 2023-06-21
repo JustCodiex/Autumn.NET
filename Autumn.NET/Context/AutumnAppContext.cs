@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 
 using Autumn.Annotations;
+using Autumn.Annotations.Internal;
 using Autumn.Context.Configuration;
 using Autumn.Context.Factory;
 
@@ -100,10 +101,8 @@ public sealed class AutumnAppContext {
     }
 
     public void RegisterComponent<T>(T component) where T : notnull {
-        var t = typeof(T);
-        var componentType = t.IsInterface || t.IsAbstract ? component.GetType() : t;
-        RegisterComponent(componentType);
-        var identifier = ComponentIdentifier.DefaultIdentifier(componentType);
+        RegisterComponent(component.GetType());
+        var identifier = ComponentIdentifier.DefaultIdentifier(component.GetType());
         singletonFactory.RegisterSingleton(identifier, component);
     }
 
@@ -147,11 +146,17 @@ public sealed class AutumnAppContext {
     /// </summary>
     /// <param name="type">The type of the instance to retrieve.</param>
     /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
-    public object? GetInstanceOf(Type type) {
+    public object? GetInstanceOf(Type type) => GetInstanceOfInternal(type, Array.Empty<object>());
+
+    public T GetInstanceOf<T>() => GetInstanceOfInternal(typeof(T), Array.Empty<object>()) is T t ? t : throw new Exception();
+
+    public T GetInstanceOf<T>(params object[] constructorArguments) => GetInstanceOfInternal(typeof(T), constructorArguments) is T t ? t : throw new Exception();
+
+    private object? GetInstanceOfInternal(Type type, object[] constructorArguments) {
 
         var key = ComponentIdentifier.DefaultIdentifier(type);
         if (components.TryGetValue(key.ComponentQualifier, out var instance) && instance.FirstOrDefault(x => x.Type == type) is TypeCreator creator) {
-            return creator.Factory.GetComponent(key);
+            return creator.Factory.GetComponent(key, constructorArguments);
         }
 
         if (services.TryGetValue(type.FullName!, out var instances) && instances.Any(x => x.Type == type)) {
@@ -162,16 +167,21 @@ public sealed class AutumnAppContext {
 
     }
 
-    internal object? CreateContextObject(Type componentType) {
+    internal delegate (bool, object?) InjectParameterHandler(IInjectAnnotation annotation, ParameterInfo parameterInfo);
+
+    internal object? CreateContextObject(Type componentType, Action<object>? constructed, object[] args) => CreateContextObject(componentType, null, constructed, args);
+
+    internal object? CreateContextObject(Type componentType, InjectParameterHandler? injectionHandler, Action<object>? constructed, object[] args) {
 
         // Get best constructor
-        var (ctor, callargs) = GetConstructor(componentType);
+        var (ctor, callargs) = GetConstructor(componentType, injectionHandler, args);
         if (ctor is null) {
             return null;
         }
 
         // Create
         var component = ctor.Invoke(callargs) ?? throw new Exception();
+        constructed?.Invoke(component);
 
         // Initialise
         InitialiseContextObject(component, componentType);
@@ -194,7 +204,7 @@ public sealed class AutumnAppContext {
 
     }
 
-    private (ConstructorInfo?, object?[] callargs) GetConstructor(Type klass, params object[] args) {
+    private (ConstructorInfo?, object?[] callargs) GetConstructor(Type klass, InjectParameterHandler? injectHandler, object[] args) {
 
         // Get constructors
         var ctors = klass.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -203,17 +213,20 @@ public sealed class AutumnAppContext {
             if (ctor.GetCustomAttribute<InjectAttribute>() is not null) {
                 throw new NotImplementedException();
             } else {
-                var attributedArgs = ctorArgs.Select(x => (x, x.GetCustomAttribute<InjectAttribute>())).ToArray();
+                var attributedArgs = ctorArgs.Select(x => (x, GetInjectAttribute(x))).ToArray();
                 var injectArgs = attributedArgs.Where(x => x.Item2 is not null).ToArray();
                 var passArgs = attributedArgs.Where(x => x.Item2 is null).ToArray();
-                if (passArgs.Length == args.Length && passArgs.Zip(args).All(x => x.First.x == x.Second)) {
+                if (passArgs.Length == args.Length && passArgs.Zip(args).All(x => x.Second.GetType().IsAssignableTo(x.First.x.ParameterType))) {
                     var callArgs = new object?[ctorArgs.Length];
                     int j = 0;
                     for (int i = 0; i < callArgs.Length; i++) {
                         if (attributedArgs[i].Item2 is InjectAttribute inject) {
                             callArgs[i] = SolveInjectDependency(attributedArgs[i].x.ParameterType, attributedArgs[i].x.Name!, inject);
+                        } else if (injectHandler is not null && attributedArgs[i].Item2 is IInjectAnnotation iij) {
+                            var (found, value) = injectHandler(iij, attributedArgs[i].x);
+                            callArgs[i] = found ? value : passArgs[j++];
                         } else {
-                            callArgs[i] = passArgs[j++];
+                            callArgs[i] = args[j++];
                         }
                     }
                     return (ctor, callArgs);
@@ -225,10 +238,22 @@ public sealed class AutumnAppContext {
 
     }
 
+    private static Attribute? GetInjectAttribute(ParameterInfo p) {
+        Attribute? att = null;
+        foreach (var a in p.GetCustomAttributes()) {
+            if (a is IInjectAnnotation) {
+                if (att is not null)
+                    throw new Exception(); // Illegal annotation combination
+                att = a;
+            }
+        }
+        return att;
+    }
+
     private object? GetComponent((string,Type) componentIdentifier) {
         var identifier = new ComponentIdentifier(componentIdentifier.Item1, componentIdentifier.Item2);
         if (singletonFactory.HasSingleton(identifier)) {
-            return singletonFactory.GetComponent(identifier);
+            return singletonFactory.GetComponent(identifier, Array.Empty<object>());
         }
         if (components.TryGetValue(componentIdentifier.Item1, out var typesByQualifier)) {
             throw new NotImplementedException();
@@ -236,10 +261,10 @@ public sealed class AutumnAppContext {
         if (components.TryGetValue(componentIdentifier.Item2.FullName!, out var typesByType)) {
             var qualifiedByName = typesByType.Where(x => x.Type.Name == componentIdentifier.Item1).ToList();
             if (qualifiedByName.Count == 1) {
-                return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type));
+                return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type), Array.Empty<object>());
             }
             if (typesByType.Count == 1) {
-                return typesByType.First().Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(typesByType.First().Type));
+                return typesByType.First().Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(typesByType.First().Type), Array.Empty<object>());
             }
             throw new NotImplementedException();
         }
@@ -256,7 +281,7 @@ public sealed class AutumnAppContext {
             if (!LookupConfigValue(propertyInfo.PropertyType, sources, propertyDesc!.Key, propertyDesc.Default, out object? value)) {
                 continue;
             }
-            SetValue(instance, propertyInfo, value);
+            InjectionHelper.Inject(klass, propertyInfo, instance, value);
         }
 
     }
@@ -296,7 +321,7 @@ public sealed class AutumnAppContext {
             object? injectValue = SolveInjectDependency(property.x.PropertyType, property.x.Name, property.Item2!);
 
             // Set it
-            SetValue(target, property.x, injectValue);
+            InjectionHelper.Inject(targetType, property.x, target, injectValue);
 
         }
 
@@ -314,18 +339,6 @@ public sealed class AutumnAppContext {
             return compoennt2;
         }
         return null; // TODO: Check if null
-    }
-
-    private void SetValue(object instance, PropertyInfo propertyInfo, object? value) {
-        var klass = propertyInfo.DeclaringType!;
-        if (propertyInfo.SetMethod is MethodInfo setter) {
-            setter.Invoke(instance, new[] { value });
-        } else {
-            var fields = klass.GetFields(BindingFlags.NonPublic | BindingFlags.Instance);
-            if (fields.FirstOrDefault(x => x.Name == $"<{propertyInfo.Name}>k__BackingField") is FieldInfo field) {
-                field.SetValue(instance, value);
-            }
-        }
     }
 
     private void RunPostInit(object target, Type targetType) {
@@ -359,15 +372,22 @@ public sealed class AutumnAppContext {
 
     private IComponentFactory GetComponentFactory(Type type) {
         if (type.GetCustomAttribute<ComponentAttribute>() is ComponentAttribute componentAttribute) {
-            // Return proxy or smth (Check if component should be instantiated on every call to get component)
-            return singletonFactory;
+            var makeProxy = false; // TODO: Get better flag
+            if (makeProxy) {
+                throw new NotImplementedException();
+            }
+            return componentAttribute.Scope switch {
+                ComponentScope.Singleton => singletonFactory,
+                ComponentScope.Multiton => new InstanceFactory(this, type),
+                _ => throw new NotImplementedException()
+            };
         }
         return singletonFactory;
     }
 
     public object[] GetComponents(Type type) {
         if (components.TryGetValue(type.FullName!, out var creators)) {
-            var instances = creators.Select(x => x.Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(x.Type))).ToArray();
+            var instances = creators.Select(x => x.Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(x.Type), Array.Empty<object>())).ToArray();
             return instances;
         }
         return Array.Empty<object>();

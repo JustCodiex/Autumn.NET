@@ -14,11 +14,16 @@ internal sealed class ContextLoader {
 
     private record struct AutumnLibraryContextLoader(Type ClassTarget, Action<AutumnAppContext, Type[]> MethodTarget, AutumnContextLoaderAttribute ContextLoaderAttribute);
 
+    internal record struct AutumnLibraryAppLoader(Type ClassTarget, AutumnApplicationLoaderAttribute LoaderAttribute);
+
     private readonly string[] propertySources;
     private readonly ConfigFactory configFactory;
     private readonly Dictionary<Type, AutumnTemplate> templates;
     private readonly Dictionary<Type, AutumnTemplate> templateImplementations;
     private readonly List<AutumnLibraryContextLoader> libraryContextLoaders;
+    private readonly List<AutumnLibraryAppLoader> libraryAppLoaders;
+
+    internal List<AutumnLibraryAppLoader> ApplicationLoaders => libraryAppLoaders;
 
     internal ContextLoader(params string[] propertySources) { 
         this.propertySources = propertySources
@@ -28,6 +33,7 @@ internal sealed class ContextLoader {
         this.templates = new();
         this.templateImplementations = new();
         this.libraryContextLoaders = new List<AutumnLibraryContextLoader>();
+        this.libraryAppLoaders = new List<AutumnLibraryAppLoader>();
     }
 
     internal void LoadAssemblyContext() {
@@ -67,7 +73,8 @@ internal sealed class ContextLoader {
         // TODO: Add security checks here to verify these assemblies are loaded correctly
         string[] autumnAssemblyFiles = {
             "Autumn.NET.Database.dll",
-            "Autumn.NET.Database.*.dll" // Database specific implementations
+            "Autumn.NET.Database.*.dll", // Database specific implementations
+            "Autumn.NET.WPF.dll"
         };
         HashSet<string> targetAssemblies = new HashSet<string>();
         for (int i = 0; i < autumnAssemblyFiles.Length; i++) {
@@ -125,6 +132,9 @@ internal sealed class ContextLoader {
                     });
                 if (targetMethod is not null)
                     libraryContextLoaders.Add(new AutumnLibraryContextLoader(type, targetMethod.CreateDelegate<Action<AutumnAppContext, Type[]>>(), autumnContextLoaderAttribute));
+            }
+            if (type.GetCustomAttribute<AutumnApplicationLoaderAttribute>() is AutumnApplicationLoaderAttribute autumnApplicationLoaderAttribute) {
+                libraryAppLoaders.Add(new(type, autumnApplicationLoaderAttribute));
             }
         }
 

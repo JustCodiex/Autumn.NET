@@ -6,7 +6,7 @@ internal class ProxyFactory : IComponentFactory {
         throw new NotImplementedException();
     }
 
-    public object GetComponent(ComponentIdentifier identifier) {
+    public object GetComponent(ComponentIdentifier identifier, object[] args) {
         throw new NotImplementedException();
     }
 
