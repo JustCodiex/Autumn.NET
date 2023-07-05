@@ -43,7 +43,7 @@ public sealed class AutumnWpfApplication {
     /// <param name="appContext">The Autumn application context.</param>
     /// <param name="appTypes">An array of types representing the application types.</param>
     /// <exception cref="ApplicationInitializationException">Thrown when the main object is not a valid WPF application target.</exception>
-    public void LoadApplication(object? main, AutumnAppContext appContext, Type[] appTypes) {
+    public void LoadApplication(object? main, AutumnAppContext appContext, IList<Type> appTypes) {
 
         if (main is not ControlledApplication app) {
             throw new ApplicationInitializationException("Invalid WPF application target");
@@ -58,7 +58,7 @@ public sealed class AutumnWpfApplication {
         ResourceDictionary mvvmBindings = new ResourceDictionary();
         ResourceDictionary converterBindings = new ResourceDictionary();
 
-        for (int i = 0; i < appTypes.Length; i++) {
+        for (int i = 0; i < appTypes.Count; i++) {
             if (appTypes[i].GetCustomAttribute<ModelAttribute>() is ModelAttribute modelAttrib) {
                 mvvmBindings.Add(modelAttrib.ModelType, AutumnTemplateGenerator.CreateDataTemplate(modelAttrib.ModelType, appTypes[i], t => {
                     var modelInstance = appContext.GetInstanceOf(modelAttrib.ModelType) ?? throw new Exception();

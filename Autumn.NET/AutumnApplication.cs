@@ -93,15 +93,12 @@ public sealed class AutumnApplication {
         activeApps.Add(app);
         mainApp ??= app;
 
-        // Get namespace
-        var subTypes = mainClassType.Assembly.GetTypes();
-        if (!string.IsNullOrEmpty(mainClassType.Namespace)) {
-            subTypes = subTypes.Where(x => x.Namespace?.StartsWith(mainClassType.Namespace) ?? false).ToArray();
-        }
+        // Create context loader
+        ContextLoader loader = new ContextLoader();
+        var subTypes = loader.GetTypes(mainClassType);
 
         // Load it up
-        ContextLoader loader = new ContextLoader();
-        loader.LoadAssemblyContext();
+        loader.LoadAssemblyContext(app.AppContext);
         loader.LoadContext(app.AppContext, subTypes);
 
         // Parse arguments
@@ -184,7 +181,7 @@ public sealed class AutumnApplication {
     }
 
     private static void InvokeAppLoader(object? mainKlass, Type mainKlassType, Type appLoader, AutumnApplicationLoaderAttribute appLoaderConfig, 
-        AutumnAppContext appContext, Type[] subTypes) {
+        AutumnAppContext appContext, IList<Type> subTypes) {
 
         var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         Type[] parameters = { typeof(object), typeof(AutumnAppContext), typeof(Type[]) };

@@ -12,7 +12,7 @@ internal sealed class ContextLoader {
 
     private record struct AutumnTemplate(Type Target, AutumnTemplateAttribute TemplateAttribute);
 
-    private record struct AutumnLibraryContextLoader(Type ClassTarget, Action<AutumnAppContext, Type[]> MethodTarget, AutumnContextLoaderAttribute ContextLoaderAttribute);
+    private record struct AutumnLibraryContextLoader(Type ClassTarget, Action<AutumnAppContext, IList<Type>> MethodTarget, AutumnContextLoaderAttribute ContextLoaderAttribute);
 
     internal record struct AutumnLibraryAppLoader(Type ClassTarget, AutumnApplicationLoaderAttribute LoaderAttribute);
 
@@ -22,6 +22,7 @@ internal sealed class ContextLoader {
     private readonly Dictionary<Type, AutumnTemplate> templateImplementations;
     private readonly List<AutumnLibraryContextLoader> libraryContextLoaders;
     private readonly List<AutumnLibraryAppLoader> libraryAppLoaders;
+    private readonly List<string> scanNamespaces;
 
     internal List<AutumnLibraryAppLoader> ApplicationLoaders => libraryAppLoaders;
 
@@ -34,9 +35,10 @@ internal sealed class ContextLoader {
         this.templateImplementations = new();
         this.libraryContextLoaders = new List<AutumnLibraryContextLoader>();
         this.libraryAppLoaders = new List<AutumnLibraryAppLoader>();
+        this.scanNamespaces = new List<string>();
     }
 
-    internal void LoadAssemblyContext() {
+    internal void LoadAssemblyContext(AutumnAppContext appContext) {
 
         string runtimeEnvironment = RuntimeEnvironment.GetRuntimeDirectory();
 
@@ -61,11 +63,16 @@ internal sealed class ContextLoader {
         // Get relevant assemblies
         var projectAssemblies = new HashSet<Assembly>(assemblyDictionary.Values);
 
-        var domainTypes = assemblyDictionary.Values.SelectMany(x => x.GetExportedTypes()).ToArray();
-        // TODO: Use these types
-
         // Load Autumn assemblies
         LoadAutumnAssemblies(projectAssemblies);
+
+        // Get domain types and load them as well
+        var domainTypes = assemblyDictionary.Values
+            .SelectMany(x => x.GetExportedTypes())
+            .Where(x => !string.IsNullOrEmpty(x.Namespace) && scanNamespaces.FindIndex(x.Namespace.StartsWith) is int i && i != -1)
+            .Select(x => (x, x.GetCustomAttribute<ComponentAttribute>())) // TODO: Include other than components here
+            .Where(x => x.Item2 is not null);
+        LoadComponents(appContext, domainTypes);
 
     }
 
@@ -128,10 +135,10 @@ internal sealed class ContextLoader {
                     BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic, 
                     new Type[] { 
                         typeof(AutumnAppContext), 
-                        typeof(Type[]) 
+                        typeof(IList<Type>) 
                     });
                 if (targetMethod is not null)
-                    libraryContextLoaders.Add(new AutumnLibraryContextLoader(type, targetMethod.CreateDelegate<Action<AutumnAppContext, Type[]>>(), autumnContextLoaderAttribute));
+                    libraryContextLoaders.Add(new AutumnLibraryContextLoader(type, targetMethod.CreateDelegate<Action<AutumnAppContext, IList<Type>>>(), autumnContextLoaderAttribute));
             }
             if (type.GetCustomAttribute<AutumnApplicationLoaderAttribute>() is AutumnApplicationLoaderAttribute autumnApplicationLoaderAttribute) {
                 libraryAppLoaders.Add(new(type, autumnApplicationLoaderAttribute));
@@ -140,7 +147,7 @@ internal sealed class ContextLoader {
 
     }
 
-    internal void LoadContext(AutumnAppContext context, Type[] types) {
+    internal void LoadContext(AutumnAppContext context, IList<Type> types) {
 
         // Select all service types
         var serviceTypes = types.Select(x => (x, x.GetCustomAttribute<ServiceAttribute>())).Where(x => x.Item2 is not null);
@@ -207,6 +214,20 @@ internal sealed class ContextLoader {
         foreach (var (klass, componentDesc) in components) {
             context.RegisterComponent(klass);
         }
+    }
+
+    public IList<Type> GetTypes(Type source) {
+
+        foreach (var nsSource in source.GetCustomAttributes<ScanNamespaces>()) {
+            scanNamespaces.AddRange(nsSource.Namespaces);
+        }
+
+        var assemblyTypes = source.Assembly.GetTypes();
+        if (!string.IsNullOrEmpty(source.Namespace)) {
+            assemblyTypes = assemblyTypes.Where(x => x.Namespace?.StartsWith(source.Namespace) ?? false).ToArray();
+        }
+        return assemblyTypes;
+
     }
 
 }

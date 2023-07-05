@@ -41,11 +41,11 @@ public class DatabaseApplicationContext {
     /// </summary>
     /// <param name="context">The AutumnAppContext instance.</param>
     /// <param name="types">The types to process for database-related components.</param>
-    public static void LoadContext(AutumnAppContext context, Type[] types) { // This method is called automatically because of the AutumnContextLoader attribute
+    public static void LoadContext(AutumnAppContext context, IList<Type> types) { // This method is called automatically because of the AutumnContextLoader attribute
 
         DatabaseApplicationContext databaseLibraryContext = new DatabaseApplicationContext();
 
-        for (int i = 0; i < types.Length; i++) {
+        for (int i = 0; i < types.Count; i++) {
 
             if (types[i].GetCustomAttribute<RowAttribute>() is RowAttribute rowAttribute) {
                 var mapper = CreateRowMapper(types[i], rowAttribute);
