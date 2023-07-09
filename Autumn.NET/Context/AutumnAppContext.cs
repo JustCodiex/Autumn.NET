@@ -1,9 +1,11 @@
-﻿using System.Reflection;
+﻿using System.Globalization;
+using System.Reflection;
 
 using Autumn.Annotations;
 using Autumn.Annotations.Internal;
 using Autumn.Context.Configuration;
 using Autumn.Context.Factory;
+using Autumn.Types;
 
 namespace Autumn.Context;
 
@@ -292,14 +294,17 @@ public sealed class AutumnAppContext {
         foreach (var source in sources) {
             if (source.HasValue(key)) {
                 value = source.GetValue(key);
-                if (value is not null && value.GetType() != requestedType) {
-                    value = Convert.ChangeType(value, requestedType);
+                if (value is null) {
+                    return false;
+                }
+                if (value.GetType() != requestedType) {
+                    value = TryChangeType(value, requestedType);
                 }
                 return true;
             }
         }
 
-        if (!string.IsNullOrEmpty(defaultValue) && Convert.ChangeType(defaultValue, requestedType) is object someValue) {
+        if (!string.IsNullOrEmpty(defaultValue) && TryChangeType(defaultValue, requestedType) is object someValue) {
             value = someValue;
             return true;
         }
@@ -307,6 +312,8 @@ public sealed class AutumnAppContext {
         return false;
 
     }
+
+    private static object? TryChangeType(object value, Type targetType) => TypeConverter.Convert(value, value.GetType(), targetType);
 
     private void InjectDependencies(object target, Type targetType) {
 

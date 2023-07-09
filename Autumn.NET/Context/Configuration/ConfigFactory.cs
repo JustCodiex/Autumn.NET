@@ -45,20 +45,36 @@ public sealed class ConfigFactory {
                 }
                 break;
             case YamlScalarNode scalarNode:
-                if (int.TryParse(scalarNode.Value!, out int i)) {
-                    cfg[path] = i;
-                } else if (double.TryParse(scalarNode.Value!, CultureInfo.InvariantCulture, out double d)) {
-                    cfg[path] = d;
-                } else if (scalarNode.Value?.ToLower() is "true") {
-                    cfg[path] = true;
-                } else if (scalarNode.Value?.ToLower() is "false") {
-                    cfg[path] = false;
-                } else {
-                    cfg[path] = scalarNode.Value;
+                cfg[path] = MapScalarToValue(scalarNode);
+                break;
+            case YamlSequenceNode sequenceNode:
+                IList<YamlScalarNode> scalars = new List<YamlScalarNode>();
+                for (int n = 0; n < sequenceNode.Children.Count; n++) {
+                    HandleYamlNode(path + "." + (n+1), sequenceNode.Children[n], cfg);
+                    if (sequenceNode.Children[n] is YamlScalarNode scalar) {
+                        scalars.Add(scalar);
+                    }
                 }
+                cfg[path + ".#"] = sequenceNode.Children.Count;
+                if (scalars.Count == sequenceNode.Children.Count)
+                    cfg[path] = scalars.Select(MapScalarToValue).ToArray();
                 break;
             default:
                 throw new NotImplementedException();
+        }
+    }
+
+    private object? MapScalarToValue(YamlScalarNode scalarNode) {
+        if (int.TryParse(scalarNode.Value!, out int i)) {
+            return i;
+        } else if (double.TryParse(scalarNode.Value!, CultureInfo.InvariantCulture, out double d)) {
+            return d;
+        } else if (scalarNode.Value?.ToLower() is "true") {
+            return true;
+        } else if (scalarNode.Value?.ToLower() is "false") {
+            return false;
+        } else {
+            return scalarNode.Value;
         }
     }
 
