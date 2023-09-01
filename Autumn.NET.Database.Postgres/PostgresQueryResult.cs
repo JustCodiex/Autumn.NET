@@ -49,6 +49,10 @@ public sealed class PostgresQueryResult : QueryResult {
             return (decimal)reader.GetDouble(columnIndex);
         } else if (type == typeof(DateOnly)) {
             return DateOnly.FromDateTime(reader.GetDateTime(columnIndex));
+        } else if (type == typeof(DateTime)) {
+            return reader.GetDateTime(columnIndex);
+        } else if (type == typeof(bool)) {
+            return reader.GetBoolean(columnIndex);
         }
         throw new NotSupportedException();
     }

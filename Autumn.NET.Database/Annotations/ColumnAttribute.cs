@@ -5,6 +5,8 @@ public class ColumnAttribute : Attribute {
 
     public string? ColumnName { get; }
 
+    public bool PrimaryKey { get; set; }
+
     public ColumnAttribute() { }
 
     public ColumnAttribute(string? columnName) {

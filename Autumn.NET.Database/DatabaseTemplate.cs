@@ -18,6 +18,15 @@ public abstract class DatabaseTemplate {
     public abstract T QueryForObject<T>(string sql);
 
     /// <summary>
+    /// Executes a parameterized SQL query and returns a single result object of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the result object.</typeparam>
+    /// <param name="sql">The SQL query to execute.</param>
+    /// <param name="args">The arguments for the parameterized SQL query.</param>
+    /// <returns>The single result object.</returns>
+    public abstract T QueryForObject<T>(string sql, params object?[] args);
+
+    /// <summary>
     /// Executes a SQL query and returns a single result object of type <typeparamref name="T"/> using the provided <paramref name="mapper"/>.
     /// </summary>
     /// <typeparam name="T">The type of the result object.</typeparam>
@@ -86,5 +95,13 @@ public abstract class DatabaseTemplate {
     /// <param name="args">The arguments for the parameterized SQL update statement.</param>
     /// <returns>The number of affected rows.</returns>
     public abstract int Update(string sql, params object?[] args);
+
+    /// <summary>
+    /// Inserts the value into the database using 
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    public abstract int InsertObject<T>(T value);
 
 }

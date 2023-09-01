@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Windows;
 
@@ -15,7 +16,7 @@ public class ControlledApplication : Application {
     protected override void OnStartup(StartupEventArgs e) {
         
         // Run our application
-        AutumnApplication.Run((object)this, e.Args);
+        AutumnApplication.Run((object)this, e.Args.Append("-AnoJoin=true").ToArray());
 
         // Ensure appcontext is set
         if (AppContext is null) {
@@ -32,6 +33,16 @@ public class ControlledApplication : Application {
         var windowType = TranslateViewToType(startupUri);
         AppContext.RegisterComponent(windowType);
         CreateWindow(windowType);
+
+    }
+
+    protected override void OnExit(ExitEventArgs e) {
+        
+        if (AutumnApplication.Application is AutumnApplication app) {
+            app.WaitForExit();
+        }
+
+        base.OnExit(e);
 
     }
 

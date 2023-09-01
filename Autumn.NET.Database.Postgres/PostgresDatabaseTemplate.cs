@@ -1,5 +1,9 @@
-﻿using Autumn.Annotations;
+﻿using System.Reflection;
+using System.Text;
+
+using Autumn.Annotations;
 using Autumn.Annotations.Library;
+using Autumn.Database.Annotations;
 using Autumn.Database.Lib;
 using Autumn.Database.Relational;
 
@@ -29,14 +33,14 @@ public class PostgresDatabaseTemplate : DatabaseTemplate {
 
     /// <inheritdoc/>
     public override IList<T> Query<T>(string sql) {
-        var rowmapper = this.Context.GetRowMapper<T>();
+        var rowmapper = GetRowMapperFromType<T>();
         return this.QueryInternal(sql, rowmapper, Array.Empty<object>());
     }
 
 
     /// <inheritdoc/>
     public override IList<T> Query<T>(string sql, params object?[] args) {
-        var rowmapper = this.Context.GetRowMapper<T>();
+        var rowmapper = GetRowMapperFromType<T>();
         return this.QueryInternal(sql, rowmapper, args);
     }
 
@@ -65,8 +69,25 @@ public class PostgresDatabaseTemplate : DatabaseTemplate {
         return result;
     }
 
+    private RowMapper<T> GetRowMapperFromType<T>() {
+        if (!typeof(T).IsPrimitive) {
+            return Context.GetRowMapper<T>();
+        } else if (typeof(T) == typeof(int)) {
+            return PostgresPrimitiveRowMapper.Int32 as RowMapper<T> ?? throw new Exception();
+        } else if (typeof(T) == typeof(long)) {
+            return PostgresPrimitiveRowMapper.Int64 as RowMapper<T> ?? throw new Exception();
+        } else if (typeof(T) == typeof(bool)) {
+            return PostgresPrimitiveRowMapper.Boolean as RowMapper<T> ?? throw new Exception();
+        } else {
+            throw new Exception();
+        }
+    }
+
     /// <inheritdoc/>
-    public override T QueryForObject<T>(string sql) => QueryForObjectInternal(sql, Context.GetRowMapper<T>(), Array.Empty<object>());
+    public override T QueryForObject<T>(string sql) => QueryForObjectInternal(sql, GetRowMapperFromType<T>(), Array.Empty<object>());
+
+    /// <inheritdoc/>
+    public override T QueryForObject<T>(string sql, object?[] args) => QueryForObjectInternal(sql, GetRowMapperFromType<T>(), args);
 
     /// <inheritdoc/>
     public override T QueryForObject<T>(string sql, RowMapper<T> mapper) => QueryForObjectInternal(sql, mapper, Array.Empty<object>());
@@ -107,6 +128,36 @@ public class PostgresDatabaseTemplate : DatabaseTemplate {
             result = cmd.ExecuteUpdate();
         }
          return result;
+    }
+
+    /// <inheritdoc/>
+    public override int InsertObject<T>(T value) { // TODO: Optimize
+        Type type = typeof(T);
+        if (type.GetCustomAttribute<RowAttribute>() is not RowAttribute row) {
+            throw new ArgumentException("Cannot insert non-row object", nameof(value));
+        }
+        if (string.IsNullOrEmpty(row.RelationName)) {
+            throw new ArgumentException("Cannot insert row object into unknown relation");
+        }
+        var props = type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(x => (x, x.GetCustomAttribute<ColumnAttribute>()))
+            .Where(x => x.Item2 is not null)
+            .Where(x => x.Item2!.PrimaryKey is false)
+            .ToArray();
+        StringBuilder insertQuery = new StringBuilder("INSERT INTO ").Append(row.RelationName).Append(" (");
+        StringBuilder parameterQuery = new StringBuilder("(");
+        object?[] args = new object[props.Length];
+        for (int i = 0; i < props.Length; i++) {
+            insertQuery.Append(props[i].Item2!.ColumnName);
+            parameterQuery.Append('?');
+            if (i + 1 < props.Length) {
+                insertQuery.Append(", ");
+                parameterQuery.Append(", ");
+            }
+            args[i] = props[i].x.GetValue(value);
+        }
+        insertQuery.Append(") VALUES (").Append(parameterQuery).Append(')');
+        return this.Update(insertQuery.ToString(), args);
     }
 
 }

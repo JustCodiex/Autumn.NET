@@ -64,13 +64,18 @@ public sealed class AutumnHttpServer {
 
         _listener.Start();
         while(_listener.IsListening) {
+            try {
+                // Accept
+                var next = _listener.GetContext();
 
-            // Accept
-            var next = _listener.GetContext();
+                // Handle
+                Task.Run(() => HandleIncoming(next));
 
-            // Handle
-            Task.Run(() => HandleIncoming(next));
-
+            } catch (HttpListenerException) {
+                // TODO: Allow user to configure what to do next
+            } catch {
+                throw;
+            }
         }
 
     }
@@ -110,6 +115,11 @@ public sealed class AutumnHttpServer {
 
         // Map to arguments
         object?[] callArgs = MapQueryParameters(query, handler.Info);
+        if (!GetRequestBody(listenerContext, callArgs, handler.Info)) {
+            listenerContext.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            listenerContext.Response.Close();
+            return;
+        }
 
         // Invoke
         object? result = null;
@@ -134,7 +144,7 @@ public sealed class AutumnHttpServer {
     private Dictionary<string, string> ParseQuery(Uri uri) {
         string query = uri.Query.TrimStart('?');
         Dictionary<string, string> result = new();
-        string[] parameters = query.Split('&');
+        string[] parameters = query.Split('&', StringSplitOptions.RemoveEmptyEntries);
         for (int i = 0; i < parameters.Length; i++) {
             int eq = parameters[i].IndexOf('=');
             result[parameters[i][..eq].Trim()] = parameters[i][(eq+1)..].Trim();
@@ -146,11 +156,55 @@ public sealed class AutumnHttpServer {
         var methodArgs = methodInfo.GetParameters();
         object?[] callArgs = new object?[methodArgs.Length];
         for (int i = 0; i < callArgs.Length; i++) {
-            if (parameters.TryGetValue(methodArgs[i].Name!, out string? paramValue)) {
+            if (methodArgs[i].GetCustomAttribute<BodyAttribute>() is not null) {
+                continue;
+            }
+            var paramName = methodArgs[i].GetCustomAttribute<ParameterAttribute>() is ParameterAttribute p ? p.Name : methodArgs[i].Name!;
+            if (parameters.TryGetValue(paramName, out string? paramValue)) {
                 callArgs[i] = MapStringToType(paramValue, methodArgs[i].ParameterType);
             }
         }
         return callArgs;
+    }
+
+    private bool GetRequestBody(HttpListenerContext context, object?[] currentArgs, MethodInfo methodInfo) {
+        ParameterInfo[] parameterInfos = methodInfo.GetParameters();
+        ParameterInfo? bodyParameter = parameterInfos.FirstOrDefault(x => x.GetCustomAttribute<BodyAttribute>() is not null);
+        if (bodyParameter is null) {
+            return true;
+        }
+
+        int bodyParameterIndex = Array.IndexOf(parameterInfos, bodyParameter);
+        if (!context.Request.HasEntityBody) {
+            return false;
+        }
+
+        if (currentArgs[bodyParameterIndex] is not null) {
+            return false;
+        }
+
+        // Else, try through json
+        switch (context.Request.ContentType?.ToLower()) {
+            case "text/plain" or "text/html" when bodyParameter.ParameterType == typeof(string): {
+                using var streamReader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
+                currentArgs[bodyParameterIndex] = streamReader.ReadToEnd();
+                return true;
+            }
+            case "application/xml":
+            case "text/xml":
+                throw new NotImplementedException();
+            case "application/x-www-form-urlencoded":
+                throw new NotImplementedException();
+            case "application/json":
+            default:
+                try {
+                    currentArgs[bodyParameterIndex] = JsonSerializer.Deserialize(context.Request.InputStream, bodyParameter.ParameterType);
+                } catch {
+                    return false;
+                }
+                return true;
+        }
+        
     }
 
     private object? MapStringToType(string value, Type targetType) {
@@ -175,6 +229,12 @@ public sealed class AutumnHttpServer {
                 break;
         }
         response.OutputStream.Close();
+    }
+
+    public void Shutdown() {
+        try {
+            _listener.Stop();
+        } catch { }
     }
 
 }

@@ -172,10 +172,8 @@ public sealed class AutumnApplication {
         }
 
         // Join
-        foreach (var thread in app.threads) {
-            try {
-                thread.Join();
-            } catch { }
+        if (!args.Contains("-AnoJoin=true")) {
+            app.WaitForExitInternal();
         }
 
     }
@@ -199,6 +197,21 @@ public sealed class AutumnApplication {
             loader.Invoke(instance, new[] { mainKlass, appContext, subTypes });
         }
 
+    }
+
+    public void WaitForExit() {
+        if (httpServer is not null) {
+            httpServer.Shutdown();
+        }
+        WaitForExitInternal();
+    }
+
+    private void WaitForExitInternal() {
+        foreach (var thread in threads) {
+            try {
+                thread.Join();
+            } catch { }
+        }
     }
 
 }

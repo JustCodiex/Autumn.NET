@@ -69,10 +69,17 @@ internal sealed class ContextLoader {
         // Get domain types and load them as well
         var domainTypes = assemblyDictionary.Values
             .SelectMany(x => x.GetExportedTypes())
-            .Where(x => !string.IsNullOrEmpty(x.Namespace) && scanNamespaces.FindIndex(x.Namespace.StartsWith) is int i && i != -1)
-            .Select(x => (x, x.GetCustomAttribute<ComponentAttribute>())) // TODO: Include other than components here
+            .Where(x => !string.IsNullOrEmpty(x.Namespace) && scanNamespaces.FindIndex(x.Namespace.StartsWith) is int i && i != -1);
+
+        // Load components
+        var components = domainTypes.Select(x => (x, x.GetCustomAttribute<ComponentAttribute>()))
             .Where(x => x.Item2 is not null);
-        LoadComponents(appContext, domainTypes);
+        LoadComponents(appContext, components);
+
+        // Load services
+        var services = domainTypes.Select(x => (x, x.GetCustomAttribute<ServiceAttribute>()))
+            .Where(x => x.Item2 is not null);
+        LoadServices(appContext, services);
 
     }
 

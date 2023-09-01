@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 
 using Npgsql;
 
@@ -60,7 +61,7 @@ public sealed class PostgresDatabaseCommand : DatabaseCommand {
     public override int ExecuteUpdate() => this.command.ExecuteNonQuery();
 
     /// <inheritdoc/>
-    public override void SetArgument(int index, object? value) {
+    public override void SetArgument(int index, object? value) { // TODO: Try determine db type from type hints (ie. from the Column attribute)
         if (index < 0) {
             throw new ArgumentOutOfRangeException(nameof(index));
         }
@@ -90,6 +91,21 @@ public sealed class PostgresDatabaseCommand : DatabaseCommand {
             case DateOnly dateOnly:
                 this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Timestamp) {
                     Value = dateOnly.ToDateTime(TimeOnly.MinValue)
+                });
+                break;
+            case DateTime dateOnly:
+                this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Timestamp) {
+                    Value = dateOnly
+                });
+                break;
+            case bool bol:
+                this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Boolean) {
+                    Value = bol
+                });
+                break;
+            case Guid guid:
+                this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Uuid) {
+                    Value = guid
                 });
                 break;
             case null:

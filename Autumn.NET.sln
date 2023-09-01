@@ -19,7 +19,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Autumn.NET.Database.Postgre
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Autumn.NET.Wpf", "Autumn.NET.Wpf\Autumn.NET.Wpf.csproj", "{426E4666-738F-4F39-B956-06FC98472A72}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Budget", "Samples\Budget\Budget.csproj", "{0B7CD7CE-E6C0-4E7A-8175-2EDBB351690E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Budget", "Samples\Budget\Budget.csproj", "{0B7CD7CE-E6C0-4E7A-8175-2EDBB351690E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Autumn.NET.Test.NUnit", "Autumn.NET.Test.NUnit\Autumn.NET.Test.NUnit.csproj", "{BDEF5C12-7765-4B5B-8886-1D016467D0C4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Autumn.NET.Test.NUnit.Test", "Autumn.NET.Test.NUnit.Test\Autumn.NET.Test.NUnit.Test.csproj", "{6436612E-E077-44A1-A076-502966566C34}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -63,6 +67,14 @@ Global
 		{0B7CD7CE-E6C0-4E7A-8175-2EDBB351690E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0B7CD7CE-E6C0-4E7A-8175-2EDBB351690E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0B7CD7CE-E6C0-4E7A-8175-2EDBB351690E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BDEF5C12-7765-4B5B-8886-1D016467D0C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BDEF5C12-7765-4B5B-8886-1D016467D0C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BDEF5C12-7765-4B5B-8886-1D016467D0C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BDEF5C12-7765-4B5B-8886-1D016467D0C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6436612E-E077-44A1-A076-502966566C34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6436612E-E077-44A1-A076-502966566C34}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6436612E-E077-44A1-A076-502966566C34}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6436612E-E077-44A1-A076-502966566C34}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
