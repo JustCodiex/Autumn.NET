@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 
+using Autumn.Annotations;
 using Autumn.Context;
 using Autumn.Http.Annotations;
 
@@ -20,6 +21,11 @@ public sealed class AutumnHttpServer {
     private readonly Dictionary<string, HttpEndpoint> _endpoints;
 
     private readonly HttpListener _listener;
+
+    /// <summary>
+    /// Gets a value indicating if the AutumnHTTP server can be used on the current operating system.
+    /// </summary>
+    public static bool IsSupported => HttpListener.IsSupported;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AutumnHttpServer"/> class with the specified application context.
@@ -157,6 +163,10 @@ public sealed class AutumnHttpServer {
         object?[] callArgs = new object?[methodArgs.Length];
         for (int i = 0; i < callArgs.Length; i++) {
             if (methodArgs[i].GetCustomAttribute<BodyAttribute>() is not null) {
+                continue;
+            }
+            if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) {
+                callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute);
                 continue;
             }
             var paramName = methodArgs[i].GetCustomAttribute<ParameterAttribute>() is ParameterAttribute p ? p.Name : methodArgs[i].Name!;

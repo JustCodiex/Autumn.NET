@@ -334,7 +334,7 @@ public sealed class AutumnAppContext {
 
     }
 
-    private object? SolveInjectDependency(Type expectedType, string implicitQualifier, InjectAttribute inject) {
+    internal object? SolveInjectDependency(Type expectedType, string implicitQualifier, InjectAttribute inject) {
         if (!string.IsNullOrEmpty(inject.Qualifier)) {
             throw new NotImplementedException();
         }

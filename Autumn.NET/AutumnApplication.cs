@@ -148,6 +148,9 @@ public sealed class AutumnApplication {
 
         // Start server if endpoints
         if (endpointsServices.Count > 0) {
+            if (!AutumnHttpServer.IsSupported) {
+                throw new NotSupportedException("Cannot start an HTTP server on an unsupported system");
+            }
             app.httpServer = new AutumnHttpServer(app.AppContext);
             foreach (var endpoints in endpointsServices) {
                 app.httpServer.RegisterEndpoint(endpoints.Item1, endpoints.Item2!, endpoints.Item3!);
@@ -200,9 +203,7 @@ public sealed class AutumnApplication {
     }
 
     public void WaitForExit() {
-        if (httpServer is not null) {
-            httpServer.Shutdown();
-        }
+        httpServer?.Shutdown();
         WaitForExitInternal();
     }
 
