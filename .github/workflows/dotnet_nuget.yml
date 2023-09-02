@@ -28,6 +28,9 @@ jobs:
 
     - name: Prep packages
       run: dotnet nuget add source --username justcodiex --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/justcodiex/index.json"
-      
+
+    - name: Log file structure
+      run: Tree Autumn.NET
+
     - name: Publish to GitHub packages 
       run: dotnet nuget push Autumn.NET/bin/Release/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }}  --source "github"
