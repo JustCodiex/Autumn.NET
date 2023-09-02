@@ -33,4 +33,4 @@ jobs:
       run: Get-ChildItem -Recurse Autumn.NET/bin/Release
 
     - name: Publish to GitHub packages 
-      run: dotnet nuget push Autumn.NET/bin/Release/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }}  --source "github"
+      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET/bin/Release/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }}  --source "github"
