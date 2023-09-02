@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Autumn</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>Autumn.NET</Title>
+    <PackageProjectUrl>https://github.com/JustCodiex/Autumn.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/JustCodiex/Autumn.NET</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
