@@ -10,7 +10,17 @@
     <Title>Autumn.NET</Title>
     <PackageProjectUrl>https://github.com/JustCodiex/Autumn.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/JustCodiex/Autumn.NET</RepositoryUrl>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Version>1.0.1</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="13.1.0" />

@@ -139,7 +139,8 @@ public sealed class AutumnHttpServer {
 
         // Return
         if (result is not null && handler.Info.ReturnType != typeof(void)) {
-            MapObjectToHttpResponse(result, listenerContext.Response);
+            ContentTypeAttribute? contentTypeOverride = handler.Info.ReturnParameter.GetCustomAttribute<ContentTypeAttribute>();
+            MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
         } else {
             listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
             listenerContext.Response.Close();
@@ -226,19 +227,24 @@ public sealed class AutumnHttpServer {
         return null;
     }
 
-    private void MapObjectToHttpResponse(object value, HttpListenerResponse response) {
+    private void MapObjectToHttpResponse(object value, HttpListenerResponse response, ContentTypeAttribute? contentTypeOverwrite) {
         switch (value) {
             case string s:
-                response.Headers.Add("Content-Type", "text/html, charset=\"UTF-8\"");
+                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/html, charset=\"UTF-8\"");
                 response.OutputStream.Write(Encoding.UTF8.GetBytes(s));
                 break;
             default:
-                response.Headers.Add("Content-Type", "text/json, charset=\"UTF-8\"");
+                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/json, charset=\"UTF-8\"");
                 byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value));
                 response.OutputStream.Write(data);
                 break;
         }
         response.OutputStream.Close();
+    }
+
+    private void SetContentTypeOrDefault(HttpListenerResponse response, ContentTypeAttribute? contentType, string defaultType) {
+        string contentTypeHeader = contentType is null ? defaultType : contentType.ContentType;
+        response.Headers.Add("Content-Type", contentTypeHeader);
     }
 
     public void Shutdown() {
