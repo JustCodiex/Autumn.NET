@@ -30,13 +30,13 @@ jobs:
       run: dotnet nuget add source --username justcodiex --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/justcodiex/index.json"
 
     - name: Publish Autumn.NET to GitHub packages 
-      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET/bin/Release/Autumn.NET.1.0.0.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
+      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET/bin/Release/Autumn.NET.1.0.1.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
 
     - name: Publish Autumn.NET.Database to GitHub packages 
-      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET.Database/bin/Release/Autumn.NET.Database.1.0.0.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
+      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET.Database/bin/Release/Autumn.NET.Database.1.0.1.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
 
     - name: Publish Autumn.NET.Database.Postgres to GitHub packages 
-      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET.Database.Postgres/bin/Release/Autumn.NET.Database.Postgres.1.0.0.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
+      run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET.Database.Postgres/bin/Release/Autumn.NET.Database.Postgres.1.0.1.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
 
     - name: Publish Autumn.NET.Wpf to GitHub packages 
       run: dotnet nuget push D:/a/Autumn.NET/Autumn.NET/Autumn.NET.Wpf/bin/Release/Autumn.NET.Wpf.1.0.0.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
