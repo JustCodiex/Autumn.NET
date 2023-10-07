@@ -156,7 +156,54 @@ public class PostgresDatabaseTemplate : DatabaseTemplate {
             }
             args[i] = props[i].x.GetValue(value);
         }
-        insertQuery.Append(") VALUES (").Append(parameterQuery).Append(')');
+        insertQuery.Append(") VALUES ").Append(parameterQuery).Append(')');
+        return this.Update(insertQuery.ToString(), args);
+    }
+
+    /// <inheritdoc/>
+    public override int UpsertObject<T>(T value) {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc/>
+    public override int UpdateObject<T>(T value) {
+        Type type = typeof(T);
+        if (type.GetCustomAttribute<RowAttribute>() is not RowAttribute row) {
+            throw new ArgumentException("Cannot update non-row object", nameof(value));
+        }
+        if (string.IsNullOrEmpty(row.RelationName)) {
+            throw new ArgumentException("Cannot update row object into unknown relation");
+        }
+        var props = type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(x => (x, x.GetCustomAttribute<ColumnAttribute>()))
+            .Where(x => x.Item2 is not null)
+            .Where(x => x.Item2!.PrimaryKey is false)
+            .ToArray();
+        var pk = type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(x => (x, x.GetCustomAttribute<ColumnAttribute>()))
+            .Where(x => x.Item2 is not null)
+            .Where(x => x.Item2!.PrimaryKey is true)
+            .ToArray();
+        if (pk.Length == 0) {
+            throw new ArgumentException("Cannot update object with no primary key", nameof(value));
+        } else if (pk.Length > 1) {
+            throw new NotSupportedException("Cannot update object with multiple primary key columns");
+        }
+        StringBuilder insertQuery = new StringBuilder("UPDATE ").Append(row.RelationName).Append(" SET ");
+        object?[] args = new object[props.Length+1];
+        for (int i = 0; i < props.Length; i++) {
+            insertQuery.Append(props[i].Item2!.ColumnName);
+            insertQuery.Append(" = ");
+            insertQuery.Append('?');
+            if (i + 1 < props.Length) {
+                insertQuery.Append(", ");
+            }
+            args[i] = props[i].x.GetValue(value);
+        }
+        insertQuery.Append(" WHERE ");
+        insertQuery.Append(pk[0].Item2!.ColumnName);
+        insertQuery.Append(" = ?");
+        args[args.Length -1] = pk[0].x.GetValue(value);
         return this.Update(insertQuery.ToString(), args);
     }
 

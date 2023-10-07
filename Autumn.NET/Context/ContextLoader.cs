@@ -28,7 +28,7 @@ internal sealed class ContextLoader {
 
     internal ContextLoader(params string[] propertySources) { 
         this.propertySources = propertySources
-            .Prepend("application.yml")
+            .Prepend("application.yml").Prepend("application.yaml")
             .ToArray();
         this.configFactory = new();
         this.templates = new();
@@ -194,7 +194,7 @@ internal sealed class ContextLoader {
                 using var fs = File.OpenRead(propertySources[i]);
                 if (configFactory.LoadConfig(propertySources[i], fs) is IConfigSource source) {
                     sources.Add(source);
-                    context.RegisterComponent(source); // Also expose it to possible users
+                    context.RegisterComponent(source, Path.GetFileNameWithoutExtension(propertySources[i])); // Also expose it to possible users
                 }
             }
         }

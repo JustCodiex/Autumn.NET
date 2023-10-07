@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Autumn.Annotations;
 using Autumn.Annotations.Internal;
@@ -102,9 +103,27 @@ public sealed class AutumnAppContext {
         }
     }
 
+    /// <summary>
+    /// Register a specific component instance in the <see cref="AutumnAppContext"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of component to register</typeparam>
+    /// <param name="component">The instance to register</param>
     public void RegisterComponent<T>(T component) where T : notnull {
-        RegisterComponent(component.GetType());
-        var identifier = ComponentIdentifier.DefaultIdentifier(component.GetType());
+        Type componentType = component.GetType();
+        RegisterComponent(componentType);
+        var identifier = ComponentIdentifier.DefaultIdentifier(componentType);
+        singletonFactory.RegisterSingleton(identifier, component);
+    }
+
+    /// <summary>
+    /// Register a specific component instance in the <see cref="AutumnAppContext"/> with a specific qualifier.
+    /// </summary>
+    /// <typeparam name="T">The type of component to register</typeparam>
+    /// <param name="component">The instance to register</param>
+    /// <param name="componentQualifier">The qualifier for the component</param>
+    public void RegisterComponent<T>(T component, string componentQualifier) where T : notnull {
+        RegisterComponent(component);
+        var identifier = new ComponentIdentifier(componentQualifier, component.GetType());
         singletonFactory.RegisterSingleton(identifier, component);
     }
 
@@ -150,8 +169,19 @@ public sealed class AutumnAppContext {
     /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
     public object? GetInstanceOf(Type type) => GetInstanceOfInternal(type, Array.Empty<object>());
 
+    /// <summary>
+    /// Retrieves an instance of the specified type from the application context.
+    /// </summary>
+    /// <typeparam name="T">The type of the instance to retrieve</typeparam>
+    /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
     public T GetInstanceOf<T>() => GetInstanceOfInternal(typeof(T), Array.Empty<object>()) is T t ? t : throw new Exception();
 
+    /// <summary>
+    /// Retrieves an instance of the specified type from the application context.
+    /// </summary>
+    /// <typeparam name="T">The type of the instance to retrieve</typeparam>
+    /// <param name="constructorArguments">The arguments to pass on to the constructor.</param>
+    /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
     public T GetInstanceOf<T>(params object[] constructorArguments) => GetInstanceOfInternal(typeof(T), constructorArguments) is T t ? t : throw new Exception();
 
     private object? GetInstanceOfInternal(Type type, object[] constructorArguments) {

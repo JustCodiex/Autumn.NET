@@ -39,6 +39,12 @@ public sealed class PostgresQueryResult : QueryResult {
     /// <param name="columnIndex">The index of the column.</param>
     /// <returns>The value of the column.</returns>
     public override object? GetColumnValue(Type type, int columnIndex) {
+        if (reader.IsDBNull(columnIndex)) {
+            if (type.IsValueType) {
+                throw new Exception("Value type was null in database");
+            }
+            return null;
+        }
         if (type == typeof(string)) {
             return reader.GetString(columnIndex);
         } else if (type == typeof(int)) {

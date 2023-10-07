@@ -5,6 +5,7 @@ using System.Text.Json;
 
 using Autumn.Annotations;
 using Autumn.Context;
+using Autumn.Context.Configuration;
 using Autumn.Http.Annotations;
 
 namespace Autumn.Http;
@@ -22,6 +23,8 @@ public sealed class AutumnHttpServer {
 
     private readonly HttpListener _listener;
 
+    private bool _isListenerInitialised;
+
     /// <summary>
     /// Gets a value indicating if the AutumnHTTP server can be used on the current operating system.
     /// </summary>
@@ -35,7 +38,29 @@ public sealed class AutumnHttpServer {
         _appContext = context;
         _endpoints = new();
         _listener = new HttpListener();
-        _listener.Prefixes.Add("http://localhost:8080/");
+        
+    }
+
+    private void InitListener() {
+        if (_isListenerInitialised)
+            return;
+
+        StaticPropertySource staticPropertySource = _appContext.GetInstanceOf<StaticPropertySource>();
+        int port = staticPropertySource.GetValueOrDefault("autumn.http.port", 80);
+        string? host = staticPropertySource.GetValueOrDefault("autumn.http.host", "localhost");
+        bool isHttp = staticPropertySource.GetValueOrDefault("autumn.http.disableHttps", true); // Should probably invert this at some point
+
+        StringBuilder sb = new StringBuilder();
+        if (isHttp) {
+            sb.Append("http://");
+        } else {
+            sb.Append("https://");
+        }
+
+        _listener.Prefixes.Add(sb.Append(host).Append(':').Append(port).Append('/').ToString());
+
+        _isListenerInitialised = true;
+
     }
 
     /// <summary>
@@ -67,6 +92,9 @@ public sealed class AutumnHttpServer {
     /// Starts the HTTP server and begins listening for incoming requests.
     /// </summary>
     public void Start() {
+
+        // Init listener
+        InitListener();
 
         _listener.Start();
         while(_listener.IsListening) {
@@ -230,11 +258,11 @@ public sealed class AutumnHttpServer {
     private void MapObjectToHttpResponse(object value, HttpListenerResponse response, ContentTypeAttribute? contentTypeOverwrite) {
         switch (value) {
             case string s:
-                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/html, charset=\"UTF-8\"");
+                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/html;charset='utf-8'");
                 response.OutputStream.Write(Encoding.UTF8.GetBytes(s));
                 break;
             default:
-                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/json, charset=\"UTF-8\"");
+                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/json;charset='UTF-8'");
                 byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value));
                 response.OutputStream.Write(data);
                 break;
@@ -244,9 +272,13 @@ public sealed class AutumnHttpServer {
 
     private void SetContentTypeOrDefault(HttpListenerResponse response, ContentTypeAttribute? contentType, string defaultType) {
         string contentTypeHeader = contentType is null ? defaultType : contentType.ContentType;
-        response.Headers.Add("Content-Type", contentTypeHeader);
+        foreach (var contentTypeEntry in contentTypeHeader.Split(';'))
+            response.Headers.Add("Content-Type", contentTypeEntry);
     }
 
+    /// <summary>
+    /// Shuts down the integrated Autumn HTTP server
+    /// </summary>
     public void Shutdown() {
         try {
             _listener.Stop();

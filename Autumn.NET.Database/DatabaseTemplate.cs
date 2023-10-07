@@ -97,11 +97,27 @@ public abstract class DatabaseTemplate {
     public abstract int Update(string sql, params object?[] args);
 
     /// <summary>
-    /// Inserts the value into the database using 
+    /// Inserts the value into the database
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="value"></param>
-    /// <returns></returns>
+    /// <typeparam name="T">The type of object to insert, must be attributed with <see cref="Annotations.RowAttribute"/></typeparam>
+    /// <param name="value">The value object to insert into the database</param>
+    /// <returns>The number of rows affected</returns>
     public abstract int InsertObject<T>(T value);
+
+    /// <summary>
+    /// Inserts or updates the value in the database 
+    /// </summary>
+    /// <typeparam name="T">The type of object to upsert, must be attributed with <see cref="Annotations.RowAttribute"/></typeparam>
+    /// <param name="value">The value object to update or insert into the database</param>
+    /// <returns>The number of rows affected</returns>
+    public abstract int UpsertObject<T>(T value);
+
+    /// <summary>
+    /// Updates the value in the database
+    /// </summary>
+    /// <typeparam name="T">The type of object to update, must be attributed with <see cref="Annotations.RowAttribute"/></typeparam>
+    /// <param name="value">The value object to update in the database</param>
+    /// <returns>The number of rows affected</returns>
+    public abstract int UpdateObject<T>(T value);
 
 }
