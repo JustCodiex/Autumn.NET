@@ -7,6 +7,7 @@ using Autumn.Arguments;
 using Autumn.Context;
 using Autumn.Http;
 using Autumn.Http.Annotations;
+using Autumn.Scheduling;
 
 namespace Autumn;
 
@@ -29,6 +30,7 @@ public sealed class AutumnApplication {
     public AutumnAppContext AppContext { get; }
 
     private AutumnHttpServer? httpServer;
+    private AutumnScheduler? scheduler;
     private readonly List<Thread> threads;
     private readonly object? main;
 
@@ -110,25 +112,38 @@ public sealed class AutumnApplication {
         // Register app context
         app.AppContext.RegisterComponent(cmdArgs);
 
-        // Create services
-        var services = app.AppContext.GetServices();
+        // Create containers
         List<(object, MethodInfo?, EndpointAttribute?)> endpointsServices = new();
+        List<(object, MethodInfo?, ScheduledAttribute?)> scheduledServices = new();
         object? entryPoint = mainClass;
         MethodInfo? entryPointMethod = mainClassType.GetMethod("Start", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        // Loop over services
+        var services = app.AppContext.GetServices();
         foreach (var serviceKlass in services) {
             var service = app.AppContext.GetInstanceOf(serviceKlass) ?? throw new Exception();
+            
             var starters = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                 .Select(x => (x, x.GetCustomAttribute<StartAttribute>()))
                 .Where(x => x.Item2 is not null);
             foreach (var (start, _) in starters) {
                 start.Invoke(service, Array.Empty<object>());
             }
+            
             var endpoints = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                 .Select(x => (x, x.GetCustomAttribute<EndpointAttribute>()))
                 .Where(x => x.Item2 is not null);
             foreach (var (endpoint, endpointDesc) in endpoints) {
                 endpointsServices.Add((service, endpoint, endpointDesc));
             }
+
+            var schedules = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                .Select(x => (x, x.GetCustomAttribute<ScheduledAttribute>())) // TODO: Add support for the interface, so custom scheduling implementations are supported
+                .Where(x => x.Item2 is not null);
+            foreach (var (scheduled, scheduleDesc) in schedules) {
+                scheduledServices.Add((service, scheduled, scheduleDesc));
+            }
+
             var entryPointMethods = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                 .Select(x => (x, x?.GetCustomAttribute<EntryPointAttribute>()))
                 .Where(x => x.Item2 is not null).ToArray();
@@ -139,6 +154,7 @@ public sealed class AutumnApplication {
                 entryPoint = service;
                 entryPointMethod = entryPointMethods[0].x;
             }
+
         }
 
         // Init main class
@@ -159,6 +175,18 @@ public sealed class AutumnApplication {
             Thread httpListenerThread = new Thread(app.httpServer.Start);
             httpListenerThread.Start();
             app.threads.Add(httpListenerThread);
+        }
+
+        // Add schedules if any
+        if (scheduledServices.Count > 0) {
+            app.scheduler = new AutumnScheduler();
+            foreach (var scheduledMethod in scheduledServices) {
+                app.scheduler.Schedule(scheduledMethod.Item1!, scheduledMethod.Item2!, scheduledMethod.Item3!);
+            }
+            app.AppContext.RegisterComponent(app.scheduler);
+            Thread scheduleListenerThread = new Thread(app.scheduler.Start);
+            scheduleListenerThread.Start();
+            app.threads.Add(scheduleListenerThread);
         }
 
         // Get additional application loaders
@@ -202,8 +230,12 @@ public sealed class AutumnApplication {
 
     }
 
+    /// <summary>
+    /// Waits for the <see cref="AutumnApplication"/> to exit
+    /// </summary>
     public void WaitForExit() {
         httpServer?.Shutdown();
+        scheduler?.Shutdown();
         WaitForExitInternal();
     }
 
