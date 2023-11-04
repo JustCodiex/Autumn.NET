@@ -76,9 +76,17 @@ public sealed class Schedule : ISchedule {
         }
         string[] segments = field.Split(',');
         for (int i = 0; i < segments.Length; i++) {
+            if (segments.Length > 1 && string.IsNullOrEmpty(segments[i])) { continue; }
             var valuemapped = ParseFieldValues(segments[i], valuemaps);
             if (valuemapped is int valueentry) {
                 entries.Add(valueentry);
+                continue;
+            }
+            int step = segments[i].IndexOf('/');
+            if (step != -1) {
+                string first = segments[i][0..step];
+                string second = segments[i][(step+1)..];
+                entries.AddRange(ParseEveryNth(first, second, min, max));
                 continue;
             }
             // TODO: More parsing here
@@ -95,6 +103,20 @@ public sealed class Schedule : ISchedule {
         }
         entries.Sort();
         return new Field(entries);
+    }
+
+    private IEnumerable<int> ParseEveryNth(string first, string second, int min, int max) {
+        if (!int.TryParse(second, out int step)) {
+            throw new ArgumentException("Unable to parse field " + first + "/" + second + " since " + second + " is not a valid value");
+        }
+        if (first != "*") {
+            if (int.TryParse(first, out var value) && value < max) {
+                min = value;
+            } else {
+                throw new ArgumentOutOfRangeException(nameof(first));
+            }
+        }
+        return Enumerable.Range(min, (max-min)+1).Where(x => x % step == 0);
     }
 
     private int? ParseFieldValues(string field, (string, int)[] valuemaps) {

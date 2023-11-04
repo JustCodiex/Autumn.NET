@@ -382,8 +382,12 @@ public sealed class AutumnAppContext {
         var postInits = targetType.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                 .Select(x => (x, x.GetCustomAttribute<PostInitAttribute>()))
                 .Where(x => x.Item2 is not null);
-        foreach (var (post, _) in postInits) {
-            post.Invoke(target, Array.Empty<object>());
+        foreach (var (post, p) in postInits) {
+            if (p!.AsyncTask) {
+                Task.Run(() => post.Invoke(target, Array.Empty<object>()));
+            } else {
+                post.Invoke(target, Array.Empty<object>());
+            }
         }
     }
 

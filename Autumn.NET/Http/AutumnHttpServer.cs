@@ -2,6 +2,7 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Autumn.Annotations;
 using Autumn.Context;
@@ -16,12 +17,19 @@ namespace Autumn.Http;
 public sealed class AutumnHttpServer {
 
     private record HttpEndpointMethod(object Target, MethodInfo Info);
-    private record HttpEndpoint(string Path, HttpEndpointMethod? GetMethod, HttpEndpointMethod? PostMethod);
+    private record HttpEndpoint(string Path, 
+        HttpEndpointMethod? GetMethod, 
+        HttpEndpointMethod? PostMethod, 
+        HttpEndpointMethod? PutMethod, 
+        HttpEndpointMethod? DeleteMethod);
 
     private readonly AutumnAppContext _appContext;
     private readonly Dictionary<string, HttpEndpoint> _endpoints;
 
     private readonly HttpListener _listener;
+
+    private JsonSerializerOptions _serializerOptions = new();
+    private string _corsHeader = string.Empty;
 
     private bool _isListenerInitialised;
 
@@ -38,7 +46,6 @@ public sealed class AutumnHttpServer {
         _appContext = context;
         _endpoints = new();
         _listener = new HttpListener();
-        
     }
 
     private void InitListener() {
@@ -57,7 +64,14 @@ public sealed class AutumnHttpServer {
             sb.Append("https://");
         }
 
+        _serializerOptions = new() {
+            IncludeFields = staticPropertySource.GetValueOrDefault("autumn.http.serialiser.json.includeFields", false),
+            DefaultIgnoreCondition = staticPropertySource.GetValueOrDefault("autumn.http.serialiser.json.ignoreCondition", JsonIgnoreCondition.WhenWritingDefault)
+        };
+
         _listener.Prefixes.Add(sb.Append(host).Append(':').Append(port).Append('/').ToString());
+
+        _corsHeader = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors", string.Empty) ?? string.Empty;
 
         _isListenerInitialised = true;
 
@@ -76,7 +90,7 @@ public sealed class AutumnHttpServer {
             _endpoints[endpoint] = OverrideMethod(ep, endpointAttribute.Method, endpointMethod);
             return;
         }
-        var newHandler = OverrideMethod(new HttpEndpoint(endpoint, null, null), endpointAttribute.Method, endpointMethod);
+        var newHandler = OverrideMethod(new HttpEndpoint(endpoint, null, null, null, null), endpointAttribute.Method, endpointMethod);
         _endpoints.Add(endpoint, newHandler);
     }
 
@@ -84,6 +98,8 @@ public sealed class AutumnHttpServer {
         return method switch {
             "GET" => endpoint with { GetMethod = handler },
             "POST" => endpoint with { PostMethod = handler },
+            "PUT" => endpoint with { PutMethod = handler },
+            "DELETE" => endpoint with { DeleteMethod = handler },
             _ => throw new NotImplementedException(),
         };
     }
@@ -133,9 +149,13 @@ public sealed class AutumnHttpServer {
         }
 
         // Get handler
-        var handler = listenerContext.Request.HttpMethod switch {
+        bool isHeadMethod = listenerContext.Request.HttpMethod.Equals("HEAD", StringComparison.InvariantCultureIgnoreCase);
+        var handler = listenerContext.Request.HttpMethod.ToUpper() switch {
             "GET" => endpoint.GetMethod,
+            "HEAD" => endpoint.GetMethod,
             "POST" => endpoint.PostMethod,
+            "PUT" => endpoint.PutMethod,
+            "DELETE" => endpoint.DeleteMethod,
             _ => null
         };
         if (handler is null) {
@@ -143,6 +163,9 @@ public sealed class AutumnHttpServer {
             listenerContext.Response.Close();
             return;
         }
+
+        // Add CORS headers
+        listenerContext.Response.Headers.Add("Access-Control-Allow-Origin", this._corsHeader);
 
         // Parse query
         var query = ParseQuery(requestUrl);
@@ -166,7 +189,7 @@ public sealed class AutumnHttpServer {
         }
 
         // Return
-        if (result is not null && handler.Info.ReturnType != typeof(void)) {
+        if (!isHeadMethod && result is not null && handler.Info.ReturnType != typeof(void)) {
             ContentTypeAttribute? contentTypeOverride = handler.Info.ReturnParameter.GetCustomAttribute<ContentTypeAttribute>();
             MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
         } else {
@@ -194,13 +217,13 @@ public sealed class AutumnHttpServer {
             if (methodArgs[i].GetCustomAttribute<BodyAttribute>() is not null) {
                 continue;
             }
-            if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) {
+            if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) { // TODO: Handle scoped attributes here
                 callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute);
                 continue;
             }
             var paramName = methodArgs[i].GetCustomAttribute<ParameterAttribute>() is ParameterAttribute p ? p.Name : methodArgs[i].Name!;
             if (parameters.TryGetValue(paramName, out string? paramValue)) {
-                callArgs[i] = MapStringToType(paramValue, methodArgs[i].ParameterType);
+                callArgs[i] = MapStringToType(SanitiseQueryString(paramValue), methodArgs[i].ParameterType);
             }
         }
         return callArgs;
@@ -237,7 +260,7 @@ public sealed class AutumnHttpServer {
             case "application/json":
             default:
                 try {
-                    currentArgs[bodyParameterIndex] = JsonSerializer.Deserialize(context.Request.InputStream, bodyParameter.ParameterType);
+                    currentArgs[bodyParameterIndex] = JsonSerializer.Deserialize(context.Request.InputStream, bodyParameter.ParameterType, options: _serializerOptions);
                 } catch {
                     return false;
                 }
@@ -251,19 +274,24 @@ public sealed class AutumnHttpServer {
             return value;
         } else if (targetType == typeof(float) && float.TryParse(value, out float f)) {
             return f;
+        } else if (targetType == typeof(int) && int.TryParse(value, out int i32)) {
+            return i32;
         }
         return null;
     }
 
+    private string SanitiseQueryString(string value) // https://documentation.n-able.com/N-central/userguide/Content/Further_Reading/API_Level_Integration/API_Integration_URLEncoding.html (TODO: Add remaining)
+        => value.Replace("%20", " ").Replace("%2B", "+").Replace("%24", "$").Replace("%26", "&");
+
     private void MapObjectToHttpResponse(object value, HttpListenerResponse response, ContentTypeAttribute? contentTypeOverwrite) {
         switch (value) {
             case string s:
-                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/html;charset='utf-8'");
+                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/html; charset='utf-8'");
                 response.OutputStream.Write(Encoding.UTF8.GetBytes(s));
                 break;
             default:
-                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/json;charset='UTF-8'");
-                byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value));
+                SetContentTypeOrDefault(response, contentTypeOverwrite, "text/json; charset='utf-8'");
+                byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, options: _serializerOptions));
                 response.OutputStream.Write(data);
                 break;
         }

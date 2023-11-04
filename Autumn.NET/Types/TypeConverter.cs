@@ -18,13 +18,18 @@ internal static class TypeConverter {
         if (sourceType.IsArray) {
             return ConvertArray(source, sourceType.GetElementType() ?? throw new ArgumentException("Unable to determine source element type.", nameof(source)), targetType);
         }
-
+        if (targetType.IsEnum && source is string enumString) {
+            if (Enum.TryParse(targetType, enumString, true, out object? targetEnum)) {
+                return targetEnum;
+            }
+            throw new InvalidCastException();
+        }
         return System.Convert.ChangeType(source, targetType, CultureInfo.InvariantCulture);
 
     }
 
     /// <summary>
-    /// Converts an array from the <paramref name="sourceType"/> to the <paramref name="targetType"/>.
+    /// Converts an array from the <paramref name="sourceElementType"/> to the <paramref name="targetType"/>.
     /// </summary>
     /// <param name="source">The array to convert.</param>
     /// <param name="sourceElementType">The element type of the source array.</param>
