@@ -16,6 +16,7 @@ public sealed class AutumnScheduler {
 
     private readonly List<ScheduledMethod> scheduledMethods;
     private CancellationTokenSource? cancellationToken;
+    private bool shutdown = false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AutumnScheduler"/> class.
@@ -32,12 +33,13 @@ public sealed class AutumnScheduler {
         if (cancellationToken is not null) {
             return; // Already running...
         }
+        shutdown = false;
         cancellationToken = new CancellationTokenSource();
         RunLoop(cancellationToken.Token);
     }
 
     private async void RunLoop(CancellationToken token) {
-        while (!token.IsCancellationRequested) {
+        while (!token.IsCancellationRequested && !shutdown) {
             DateTime now = DateTime.Now;
             foreach (var method in scheduledMethods) {
                 if (now >= method.NextInvocation) {
@@ -53,6 +55,7 @@ public sealed class AutumnScheduler {
     /// Shuts down the scheduler, ensuring that no new methods will be invoked.
     /// </summary>
     public void Shutdown() {
+        shutdown = true;
         cancellationToken?.Cancel();
         cancellationToken = null;
     }

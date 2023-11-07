@@ -16,6 +16,8 @@ namespace Autumn;
 /// </summary>
 public sealed class AutumnApplication {
 
+    private record ShutdownListener(object Target, MethodInfo Method, ShutdownAttribute ShutdownAttribute);
+
     private static AutumnApplication? mainApp;
     private static readonly List<AutumnApplication> activeApps = new();
 
@@ -31,12 +33,15 @@ public sealed class AutumnApplication {
 
     private AutumnHttpServer? httpServer;
     private AutumnScheduler? scheduler;
+
     private readonly List<Thread> threads;
     private readonly object? main;
+    private readonly List<ShutdownListener> shutdownListeners;
 
     private AutumnApplication(object? main) {
         this.AppContext = new AutumnAppContext();
         this.threads = new List<Thread>();
+        this.shutdownListeners = new List<ShutdownListener>();
         this.main = main;
     }
 
@@ -155,6 +160,13 @@ public sealed class AutumnApplication {
                 entryPointMethod = entryPointMethods[0].x;
             }
 
+            var shutdownHandlerMethods = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                .Select(x => (x, x?.GetCustomAttribute<ShutdownAttribute>()))
+                .Where(x => x.Item2 is not null).ToArray();
+            foreach (var (shutdown, shutdownDesc) in shutdownHandlerMethods) {
+                app.shutdownListeners.Add(new ShutdownListener(service, shutdown, shutdownDesc!));
+            }
+
         }
 
         // Init main class
@@ -196,7 +208,9 @@ public sealed class AutumnApplication {
         }
 
         // Register hook into ctrl+c
-        //AppDomain.CurrentDomain.
+        Console.CancelKeyPress += (sender, e) => {
+            e.Cancel = app.ExitApplication();
+        };
 
         if (entryPoint is not null && entryPointMethod is not null) {
             entryPointMethod.Invoke(entryPoint, Array.Empty<object>());
@@ -234,9 +248,14 @@ public sealed class AutumnApplication {
     /// Waits for the <see cref="AutumnApplication"/> to exit
     /// </summary>
     public void WaitForExit() {
+        BeginShutdown();
+        WaitForExitInternal();
+        InvokeShutdownListeners(true);
+    }
+
+    private void BeginShutdown() {
         httpServer?.Shutdown();
         scheduler?.Shutdown();
-        WaitForExitInternal();
     }
 
     private void WaitForExitInternal() {
@@ -245,6 +264,21 @@ public sealed class AutumnApplication {
                 thread.Join();
             } catch { }
         }
+    }
+
+    private void InvokeShutdownListeners(bool wasGraceful) {
+        foreach (var handler in this.shutdownListeners) {
+            if (handler.ShutdownAttribute.GracefulShutdownOnly && !wasGraceful) {
+                continue;
+            }
+            handler.Method.Invoke(handler.Target, Array.Empty<object>());
+        }
+    }
+
+    private bool ExitApplication() {
+        // TODO: Logic here to determine if we should actually exit
+        WaitForExit();
+        return false;
     }
 
 }
