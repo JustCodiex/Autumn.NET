@@ -14,7 +14,7 @@ internal class InstanceFactory : IComponentFactory {
         return;
     }
 
-    public object GetComponent(ComponentIdentifier identifier, object[] args) {
+    public object GetComponent(ComponentIdentifier identifier, object[] args, IScopeContext? scope) {
         if (identifier != instanceIdentifier) {
             throw new InvalidOperationException();
         }

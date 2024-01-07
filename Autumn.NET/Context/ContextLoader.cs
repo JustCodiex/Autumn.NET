@@ -5,6 +5,7 @@ using Autumn.Annotations;
 using Autumn.Annotations.Library;
 using Autumn.Context.Configuration;
 using Autumn.Functional;
+using Autumn.Http.Sessions;
 
 namespace Autumn.Context;
 
@@ -84,7 +85,7 @@ internal sealed class ContextLoader {
     }
 
     private void LoadAutumnAssemblies(HashSet<Assembly> loadedAssemblies) {
-        // TODO: Add security checks here to verify these assemblies are loaded correctly
+        // TODO: Add security checks here to verify these assemblies are loaded correctly and from a trusted source
         string[] autumnAssemblyFiles = {
             "Autumn.NET.Database.dll",
             "Autumn.NET.Database.*.dll", // Database specific implementations

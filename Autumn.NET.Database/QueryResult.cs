@@ -27,7 +27,7 @@ public abstract class QueryResult : IDisposable {
     /// Gets the value of the column at the specified index, converted to the specified type.
     /// </summary>
     /// <param name="type">The type to which the column value should be converted.</param>
-    /// <param name="columnIndex">The index of the column.</param>
+    /// <param name="columnIndex">The index of the column. Set to -1 for first available column</param>
     /// <returns>The value of the column.</returns>
     public abstract object? GetColumnValue(Type type, int columnIndex);
 

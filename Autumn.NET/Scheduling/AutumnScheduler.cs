@@ -66,9 +66,16 @@ public sealed class AutumnScheduler {
     /// <param name="methodTarget">The target object on which the method will be invoked.</param>
     /// <param name="methodInfo">The information of the method to be invoked.</param>
     /// <param name="scheduledAttribute">The scheduling details, defining when the method should be invoked.</param>
-    public void Schedule(object methodTarget, MethodInfo methodInfo, ISchedulerAttribute scheduledAttribute) {
-        ISchedule schedule = scheduledAttribute.GetSchedule();
-        ScheduledMethod scheduledMethod = new ScheduledMethod(schedule, methodTarget, methodInfo) { 
+    public void Schedule(object methodTarget, MethodInfo methodInfo, ISchedulerAttribute scheduledAttribute) => this.Schedule(methodTarget, methodInfo, scheduledAttribute.GetSchedule());
+
+    /// <summary>
+    /// Schedules a method to be invoked by the scheduler.
+    /// </summary>
+    /// <param name="methodTarget">The target object on which the method will be invoked.</param>
+    /// <param name="methodInfo">The information of the method to be invoked.</param>
+    /// <param name="schedule">The schedule at which the method should be invoked</param>
+    public void Schedule(object methodTarget, MethodInfo methodInfo, ISchedule schedule) {
+        ScheduledMethod scheduledMethod = new ScheduledMethod(schedule, methodTarget, methodInfo) {
             NextInvocation = schedule.GetNext(DateTime.Now)
         };
         scheduledMethods.Add(scheduledMethod);

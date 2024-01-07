@@ -8,6 +8,8 @@ using Autumn.Annotations;
 using Autumn.Context;
 using Autumn.Context.Configuration;
 using Autumn.Http.Annotations;
+using Autumn.Http.Sessions;
+using Autumn.Scheduling;
 
 namespace Autumn.Http;
 
@@ -30,6 +32,8 @@ public sealed class AutumnHttpServer {
 
     private JsonSerializerOptions _serializerOptions = new();
     private string _corsHeader = string.Empty;
+
+    private IHttpSessionManager? _sessionManager;
 
     private bool _isListenerInitialised;
 
@@ -73,8 +77,28 @@ public sealed class AutumnHttpServer {
 
         _corsHeader = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors", string.Empty) ?? string.Empty;
 
+        if (staticPropertySource.GetValueOrDefault("autumn.http.session.management.enabled", false)) {
+            InitSessionManager(staticPropertySource);
+        }
+
         _isListenerInitialised = true;
 
+    }
+
+    private void InitSessionManager(StaticPropertySource staticPropertySource) {
+        string? sessionKlass = staticPropertySource.GetValueOrDefault("autumn.http.session.management.type", typeof(AutumnHttpSessionManager).FullName);
+        if (string.IsNullOrEmpty(sessionKlass)) {
+            return; // TODO: Log
+        }
+        Type? type = _appContext.GetComponentType(sessionKlass);
+        if (type is null) {
+            return; // TODO: Log
+        }
+        _sessionManager = _appContext.GetInstanceOf(type, staticPropertySource) as IHttpSessionManager;
+        if (_sessionManager is not null) {
+            AutumnScheduler scheduler = _appContext.GetInstanceOf<AutumnScheduler>();
+            scheduler.Schedule(_sessionManager, type.GetMethod(nameof(IHttpSessionManager.DestroyInactiveSessions), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Unable to schedule even listener destruction"), Schedule.EveryNthSecond(30));
+        }
     }
 
     /// <summary>
@@ -170,8 +194,13 @@ public sealed class AutumnHttpServer {
         // Parse query
         var query = ParseQuery(requestUrl);
 
+        // Get session (if any)
+        if (!GetSession(listenerContext, query, out IHttpSession? session)) {
+            // Run session expired handler
+        }
+
         // Map to arguments
-        object?[] callArgs = MapQueryParameters(query, handler.Info);
+        object?[] callArgs = MapQueryParameters(query, handler.Info, session);
         if (!GetRequestBody(listenerContext, callArgs, handler.Info)) {
             listenerContext.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
             listenerContext.Response.Close();
@@ -210,15 +239,17 @@ public sealed class AutumnHttpServer {
         return result;
     }
 
-    private object?[] MapQueryParameters(Dictionary<string, string> parameters, MethodInfo methodInfo) {
+    private object?[] MapQueryParameters(Dictionary<string, string> parameters, MethodInfo methodInfo, IHttpSession? session) {
         var methodArgs = methodInfo.GetParameters();
         object?[] callArgs = new object?[methodArgs.Length];
         for (int i = 0; i < callArgs.Length; i++) {
             if (methodArgs[i].GetCustomAttribute<BodyAttribute>() is not null) {
                 continue;
-            }
-            if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) { // TODO: Handle scoped attributes here
-                callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute);
+            } else if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) {
+                callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute, session);
+                continue;
+            } else if (methodArgs[i].ParameterType.IsSubclassOf(typeof(IHttpSession)) || methodArgs[i].ParameterType == typeof(IHttpSession)) { // The session object is specifically requested
+                callArgs[i] = session;
                 continue;
             }
             var paramName = methodArgs[i].GetCustomAttribute<ParameterAttribute>() is ParameterAttribute p ? p.Name : methodArgs[i].Name!;
@@ -282,6 +313,18 @@ public sealed class AutumnHttpServer {
 
     private string SanitiseQueryString(string value) // https://documentation.n-able.com/N-central/userguide/Content/Further_Reading/API_Level_Integration/API_Integration_URLEncoding.html (TODO: Add remaining)
         => value.Replace("%20", " ").Replace("%2B", "+").Replace("%24", "$").Replace("%26", "&");
+
+    private bool GetSession(HttpListenerContext context, Dictionary<string, string> queryParams, out IHttpSession? session) {
+        session = this._sessionManager?.GetSession(context, queryParams);
+        if (session is null) {
+            return false;
+        }
+        // Session can only be non-null if session manager is defined
+        if (this._sessionManager!.IsExpired(session)) {
+            return false;
+        }
+        return true;
+    }
 
     private void MapObjectToHttpResponse(object value, HttpListenerResponse response, ContentTypeAttribute? contentTypeOverwrite) {
         switch (value) {

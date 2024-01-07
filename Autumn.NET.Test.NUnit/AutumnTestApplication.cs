@@ -25,7 +25,7 @@ internal class AutumnTestApplication {
     }
 
     internal void InitFixture(object fixture) {
-        appContext.InitialiseContextObject(fixture, fixture.GetType());
+        appContext.InitialiseContextObject(fixture, fixture.GetType(), null); // TODO: Replace null with a test context object
     }
 
     public static AutumnTestApplication GetTestApplication(object initialFixture) {

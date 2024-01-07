@@ -15,6 +15,11 @@ public enum ComponentScope {
     /// </summary>
     Multiton,
 
+    /// <summary>
+    /// Indicates that the component should be treated as a context-sensitive multiton, resulting in multiple instances are created and shared within a given context.
+    /// </summary>
+    Scoped,
+
 }
 
 /// <summary>

@@ -18,6 +18,13 @@ public sealed class Schedule : ISchedule {
         }
     }
 
+    private static readonly Field EverySecond = new Field(Enumerable.Range(0, 59).ToArray());
+    private static readonly Field EveryMinute = new Field(Enumerable.Range(0, 59).ToArray());
+    private static readonly Field EveryHour = new Field(Enumerable.Range(0, 23).ToArray());
+    private static readonly Field EveryDayOfMonth = new Field(Enumerable.Range(1, 31).ToArray());
+    private static readonly Field EveryDayOfWeek = new Field(Enumerable.Range(0, 7).ToArray());
+    private static readonly Field EveryMonth = new Field(Enumerable.Range(1, 12).ToArray());
+
     private static readonly Func<DateTime, int> SecondsGetter = PropertyReflection.Getter<int, DateTime>(nameof(DateTime.Second));
     private static readonly Func<DateTime, int> MinutesGetter = PropertyReflection.Getter<int, DateTime>(nameof(DateTime.Minute));
     private static readonly Func<DateTime, int> HoursGetter = PropertyReflection.Getter<int, DateTime>(nameof(DateTime.Hour));
@@ -67,6 +74,15 @@ public sealed class Schedule : ISchedule {
             ("nov", 11),
             ("dec", 12));
 
+    }
+
+    private Schedule(Field seconds, Field minutes, Field hours, Field dayOfMonth, Field dayOfWeek, Field month) {
+        this.seconds = seconds;
+        this.minutes = minutes;
+        this.hours = hours;
+        this.dayOfMonth = dayOfMonth;
+        this.dayOfWeek = dayOfWeek;
+        this.month = month;
     }
 
     private Field ParseField(string field, int min, int max, params (string,int)[] valuemaps) {
@@ -252,6 +268,14 @@ public sealed class Schedule : ISchedule {
         }
         when = t;
         return true;
+    }
+
+    public static Schedule EveryNthSecond(int seconds) {
+        if (seconds < 0) {
+            throw new ArgumentOutOfRangeException(nameof(seconds));
+        }
+        Field everyNthSecond = new Field(Enumerable.Range(0, 59).Where(x => x % seconds == 0).ToArray());
+        return new Schedule(everyNthSecond, EveryMinute, EveryHour, EveryDayOfMonth, EveryDayOfWeek, EveryMonth);
     }
 
 }

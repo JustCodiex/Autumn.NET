@@ -16,7 +16,7 @@ internal class SingletonFactory : IComponentFactory {
         return;
     }
 
-    public object GetComponent(ComponentIdentifier identifier, object[] args) {
+    public object GetComponent(ComponentIdentifier identifier, object[] args, IScopeContext? scope) {
         if (componentInstances.TryGetValue(identifier, out object? singleton)) {
             return singleton;
         }

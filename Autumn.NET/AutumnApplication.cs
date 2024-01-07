@@ -171,7 +171,7 @@ public sealed class AutumnApplication {
 
         // Init main class
         if (mainClass is not null) {
-            app.AppContext.InitialiseContextObject(mainClass, mainClassType);
+            app.AppContext.InitialiseContextObject(mainClass, mainClassType, null);
         }
 
         // Start server if endpoints
@@ -238,7 +238,7 @@ public sealed class AutumnApplication {
             loader.Invoke(null, new object[] { mainKlassType, appContext, subTypes });
         } else {
             var instance = Activator.CreateInstance(appLoader) ?? throw new Exception();
-            appContext.InitialiseContextObject(instance, appLoader);
+            appContext.InitialiseContextObject(instance, appLoader, null);
             loader.Invoke(instance, new[] { mainKlass, appContext, subTypes });
         }
 

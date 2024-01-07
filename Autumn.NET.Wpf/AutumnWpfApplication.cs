@@ -139,7 +139,7 @@ public sealed class AutumnWpfApplication {
         var container = template.LoadContent() as AutumnTemplateGenerator ?? throw new ViewNotFoundException();
         var view = container.Content;
 
-        instance.appContext.InitialiseContextObject(view, view.GetType());
+        instance.appContext.InitialiseContextObject(view, view.GetType(), null);
 
         return view;
 

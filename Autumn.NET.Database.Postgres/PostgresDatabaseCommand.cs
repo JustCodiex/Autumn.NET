@@ -107,6 +107,11 @@ public sealed class PostgresDatabaseCommand : DatabaseCommand {
                     Value = guid
                 });
                 break;
+            case byte[] bytes:
+                this.command.Parameters.Add(new NpgsqlParameter(argName, NpgsqlTypes.NpgsqlDbType.Bytea) {
+                    Value = bytes
+                });
+                break;
             case null:
                 throw new NotImplementedException();
             default:
