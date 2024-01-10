@@ -27,6 +27,7 @@ public sealed class AutumnHttpServer {
 
     private readonly AutumnAppContext _appContext;
     private readonly Dictionary<string, HttpEndpoint> _endpoints;
+    private readonly ReaderWriterLockSlim _endpointsLock;
 
     private readonly HttpListener _listener;
 
@@ -43,12 +44,18 @@ public sealed class AutumnHttpServer {
     public static bool IsSupported => HttpListener.IsSupported;
 
     /// <summary>
+    /// Get if the HTTP server is currently listening
+    /// </summary>
+    public bool IsListening => _listener.IsListening;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AutumnHttpServer"/> class with the specified application context.
     /// </summary>
     /// <param name="context">The application context.</param>
     internal AutumnHttpServer(AutumnAppContext context) {
         _appContext = context;
         _endpoints = new();
+        _endpointsLock = new ReaderWriterLockSlim();
         _listener = new HttpListener();
     }
 
@@ -97,7 +104,7 @@ public sealed class AutumnHttpServer {
         _sessionManager = _appContext.GetInstanceOf(type, staticPropertySource) as IHttpSessionManager;
         if (_sessionManager is not null) {
             AutumnScheduler scheduler = _appContext.GetInstanceOf<AutumnScheduler>();
-            scheduler.Schedule(_sessionManager, type.GetMethod(nameof(IHttpSessionManager.DestroyInactiveSessions), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Unable to schedule even listener destruction"), Schedule.EveryNthSecond(30));
+            scheduler.Schedule(_sessionManager, type.GetMethod(nameof(IHttpSessionManager.DestroyInactiveSessions), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Unable to schedule session destruction"), Schedule.EveryNthSecond(30));
         }
     }
 
@@ -118,8 +125,17 @@ public sealed class AutumnHttpServer {
         _endpoints.Add(endpoint, newHandler);
     }
 
-    private HttpEndpoint OverrideMethod(HttpEndpoint endpoint, string method, HttpEndpointMethod handler) {
-        return method switch {
+    /// <summary>
+    /// Removes all registered endpoints
+    /// </summary>
+    public void RemoveAllEndpoints() {
+        _endpointsLock.EnterWriteLock();
+        _endpoints.Clear();
+        _endpointsLock.ExitWriteLock();
+    }
+
+    private static HttpEndpoint OverrideMethod(HttpEndpoint endpoint, string method, HttpEndpointMethod handler) {
+        return method.ToUpperInvariant() switch {
             "GET" => endpoint with { GetMethod = handler },
             "POST" => endpoint with { PostMethod = handler },
             "PUT" => endpoint with { PutMethod = handler },
@@ -132,6 +148,10 @@ public sealed class AutumnHttpServer {
     /// Starts the HTTP server and begins listening for incoming requests.
     /// </summary>
     public void Start() {
+
+        // Bail if already listening
+        if (_listener.IsListening)
+            return;
 
         // Init listener
         InitListener();
@@ -166,10 +186,16 @@ public sealed class AutumnHttpServer {
 
         // Get the local path
         string localPath = requestUrl.LocalPath;
-        if (!_endpoints.TryGetValue(localPath, out HttpEndpoint? endpoint)) {
-            listenerContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
-            listenerContext.Response.Close();
-            return;
+        HttpEndpoint? endpoint;
+        try {
+            _endpointsLock.EnterReadLock();
+            if (!_endpoints.TryGetValue(localPath, out endpoint)) {
+                listenerContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+                listenerContext.Response.Close();
+                return;
+            }
+        } finally {
+            _endpointsLock.ExitReadLock();
         }
 
         // Get handler
@@ -220,7 +246,8 @@ public sealed class AutumnHttpServer {
         // Return
         if (!isHeadMethod && result is not null && handler.Info.ReturnType != typeof(void)) {
             ContentTypeAttribute? contentTypeOverride = handler.Info.ReturnParameter.GetCustomAttribute<ContentTypeAttribute>();
-            MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
+            listenerContext.Response.StatusCode = MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
+            listenerContext.Response.OutputStream.Close();
         } else {
             listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
             listenerContext.Response.Close();
@@ -307,6 +334,14 @@ public sealed class AutumnHttpServer {
             return f;
         } else if (targetType == typeof(int) && int.TryParse(value, out int i32)) {
             return i32;
+        } else if (targetType == typeof(bool) && bool.TryParse(value, out bool b)) {
+            return b;
+        } else if (targetType == typeof(ushort) && ushort.TryParse(value, out ushort us)) {
+            return us;
+        } else if (targetType == typeof(uint) && uint.TryParse(value, out uint ui)) {
+            return ui;
+        } else if (targetType == typeof(ulong) && ulong.TryParse(value, out ulong ul)) {
+            return ul;
         }
         return null;
     }
@@ -326,11 +361,18 @@ public sealed class AutumnHttpServer {
         return true;
     }
 
-    private void MapObjectToHttpResponse(object value, HttpListenerResponse response, ContentTypeAttribute? contentTypeOverwrite) {
+    private int MapObjectToHttpResponse(object value, HttpListenerResponse response, ContentTypeAttribute? contentTypeOverwrite) {
+        int status = (int)HttpStatusCode.OK;
         switch (value) {
             case string s:
                 SetContentTypeOrDefault(response, contentTypeOverwrite, "text/html; charset='utf-8'");
                 response.OutputStream.Write(Encoding.UTF8.GetBytes(s));
+                break;
+            case IHttpResponseMapper responseObject:
+                response.ContentEncoding = responseObject.ContentEncoding;
+                SetContentTypeOrDefault(response, null, responseObject.ContentType);
+                response.OutputStream.Write(responseObject.GetResponse());
+                status = responseObject.StatusCode;
                 break;
             default:
                 SetContentTypeOrDefault(response, contentTypeOverwrite, "text/json; charset='utf-8'");
@@ -338,7 +380,7 @@ public sealed class AutumnHttpServer {
                 response.OutputStream.Write(data);
                 break;
         }
-        response.OutputStream.Close();
+        return status;
     }
 
     private void SetContentTypeOrDefault(HttpListenerResponse response, ContentTypeAttribute? contentType, string defaultType) {
