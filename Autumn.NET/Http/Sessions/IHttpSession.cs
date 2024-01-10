@@ -15,6 +15,11 @@ public interface IHttpSession : IScopeContext {
     string SessionIdentifier { get; }
 
     /// <summary>
+    /// Gets the domain of the session
+    /// </summary>
+    string SessionDomain { get; }
+
+    /// <summary>
     /// Gets the date and time when the session becomes valid.
     /// </summary>
     DateTime ValidFrom { get; }
@@ -51,8 +56,7 @@ public interface IHttpSession : IScopeContext {
     /// Converts the session into a cookie with the specified name and domain.
     /// </summary>
     /// <param name="name">The name of the cookie.</param>
-    /// <param name="domain">The domain to associate with the cookie.</param>
     /// <returns>A Cookie object representing the session.</returns>
-    Cookie ToCookie(string name, string domain);
+    Cookie ToCookie(string name);
 
 }

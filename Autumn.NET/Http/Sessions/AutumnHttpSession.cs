@@ -19,6 +19,9 @@ public sealed class AutumnHttpSession : IHttpSession {
     public string SessionIdentifier { get; }
 
     /// <inheritdoc/>
+    public string SessionDomain { get; }
+
+    /// <inheritdoc/>
     public DateTime ValidFrom { get; }
 
     /// <inheritdoc/>
@@ -28,10 +31,12 @@ public sealed class AutumnHttpSession : IHttpSession {
     /// Initializes a new instance of the AutumnHttpSession with the specified identifier, valid from and to dates.
     /// </summary>
     /// <param name="identifier">The unique identifier for the session.</param>
+    /// <param name="domain">The domain of the session</param>
     /// <param name="validFrom">The start date and time of the session's validity.</param>
     /// <param name="validTo">The end date and time of the session's validity.</param>
-    public AutumnHttpSession(string identifier, DateTime validFrom, DateTime validTo) {
+    public AutumnHttpSession(string identifier, string domain, DateTime validFrom, DateTime validTo) {
         this.SessionIdentifier = identifier;
+        this.SessionDomain = domain;
         this.ValidFrom = validFrom;
         this.expiresAt = validTo;
         this.values = new();
@@ -61,10 +66,13 @@ public sealed class AutumnHttpSession : IHttpSession {
     }
 
     /// <inheritdoc/>
-    public Cookie ToCookie(string name, string domain)
-        => new Cookie(name, this.SessionIdentifier, "/", domain) {
+    public Cookie ToCookie(string name)
+        => new Cookie(name, this.SessionIdentifier, "/", this.SessionDomain) {
             Expires = this.expiresAt,
-            HttpOnly = true,
+            HttpOnly = true, // should probably be configurable
         };
+
+    /// <inheritdoc/>
+    public override string ToString() => $"{this.SessionDomain}@{this.SessionIdentifier}";
 
 }

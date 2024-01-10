@@ -12,6 +12,9 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
     private readonly bool tokenIsQueryParameter;
     private readonly string tokenName;
 
+    private readonly double sessionLifeTime;
+    private readonly double sessionLifeExtension;
+
     private readonly Dictionary<string, IHttpSession> sessions;
 
     /// <summary>
@@ -20,10 +23,12 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
     /// <param name="staticPropertySource">The static property source containing configuration settings.</param>
     public AutumnHttpSessionManager(StaticPropertySource staticPropertySource) {
         this.sessions = new();
-        if (staticPropertySource.GetValueOrDefault("autumn.http.session.management.token-type", "query-param")?.ToLowerInvariant() is "query-param") {
+        if (staticPropertySource.GetValueOrDefault("autumn.http.session.management.token-type", "cookie")?.ToLowerInvariant() is "query-param") {
             this.tokenIsQueryParameter = true;
         }
         this.tokenName = staticPropertySource.GetValueOrDefault("autumn.http.session.management.token-name", "_s") ?? "_s";
+        this.sessionLifeTime = staticPropertySource.GetValueOrDefault("autumn.http.session.management.time", 30.0);
+        this.sessionLifeExtension = staticPropertySource.GetValueOrDefault("autumn.http.session.management.extension-time", 2.5);
     }
 
     /// <inheritdoc/>
@@ -34,15 +39,15 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
             false => TryGetCookieToken(domain, context.Request.Cookies)
         };
         if (string.IsNullOrEmpty(tokenIdentifier)) {
-            return this.RegisterSession();
+            return this.RegisterSession(context);
         }
         IHttpSession? activeSession = sessions.TryGetValue(tokenIdentifier, out IHttpSession? session) ? session : null;
         if (activeSession is null || IsExpired(activeSession)) {
             return null;
         }
-        IHttpSession updatedSession = activeSession.ExtendLifeSpan(TimeSpan.FromMinutes(2.5)); // Keep extending lifespan
+        IHttpSession updatedSession = activeSession.ExtendLifeSpan(TimeSpan.FromMinutes(sessionLifeExtension)); // Keep extending lifespan
         if (!tokenIsQueryParameter) {
-            context.Response.SetCookie(updatedSession.ToCookie(tokenName, domain));
+            context.Response.SetCookie(updatedSession.ToCookie(tokenName));
         }
         return updatedSession;
     }
@@ -54,7 +59,7 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
     /// <param name="cookies">The collection of cookies from the HTTP request.</param>
     /// <returns>The session token if found; otherwise, an empty string.</returns>
     private string TryGetCookieToken(string domain, CookieCollection cookies) {
-        Cookie? cookie = cookies.FirstOrDefault(x => x.Name == tokenName && x.Domain == domain && !x.Expired);
+        Cookie? cookie = cookies.FirstOrDefault(x => x.Name == tokenName && (x.Domain == domain || (x.Domain.Length == 0 && domain is "localhost")) && !x.Expired);
         if (cookie is null) {
             return string.Empty;
         }
@@ -69,9 +74,13 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
     /// Registers a new session and adds it to the session dictionary.
     /// </summary>
     /// <returns>The newly created <see cref="IHttpSession"/>.</returns>
-    private IHttpSession RegisterSession() {
+    private IHttpSession RegisterSession(HttpListenerContext context) {
         Guid guid = Guid.NewGuid();
-        return sessions[guid.ToString()] = new AutumnHttpSession(guid.ToString(), DateTime.UtcNow, DateTime.UtcNow.AddMinutes(30));
+        AutumnHttpSession session = new AutumnHttpSession(guid.ToString(), context.Request.Url!.Host, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(sessionLifeTime));
+        if (!tokenIsQueryParameter) {
+            context.Response.SetCookie(session.ToCookie(tokenName));
+        }
+        return sessions[guid.ToString()] = session;
     }
 
     /// <inheritdoc/>

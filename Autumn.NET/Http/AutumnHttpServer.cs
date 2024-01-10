@@ -272,11 +272,11 @@ public sealed class AutumnHttpServer {
         for (int i = 0; i < callArgs.Length; i++) {
             if (methodArgs[i].GetCustomAttribute<BodyAttribute>() is not null) {
                 continue;
-            } else if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) {
-                callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute, session);
-                continue;
             } else if (methodArgs[i].ParameterType.IsSubclassOf(typeof(IHttpSession)) || methodArgs[i].ParameterType == typeof(IHttpSession)) { // The session object is specifically requested
                 callArgs[i] = session;
+                continue;
+            } else if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) {
+                callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute, session);
                 continue;
             }
             var paramName = methodArgs[i].GetCustomAttribute<ParameterAttribute>() is ParameterAttribute p ? p.Name : methodArgs[i].Name!;
