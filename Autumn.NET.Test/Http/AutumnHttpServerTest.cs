@@ -29,8 +29,6 @@ public sealed class AutumnHttpServerTest : IDisposable {
 
     private static readonly Func<HttpClient> DefaultHttpClient = () => new();
 
-
-
     private static readonly Func<(HttpClient, CookieContainer)> DefaultCookieHttpClient = () => {
         CookieContainer cookies = new CookieContainer();
         HttpClientHandler handler = new HttpClientHandler {
@@ -39,7 +37,6 @@ public sealed class AutumnHttpServerTest : IDisposable {
         };
         return (new HttpClient(handler), cookies);
     };
-
 
     [Fact]
     public void CanCreateHttpServer() {
@@ -63,6 +60,15 @@ public sealed class AutumnHttpServerTest : IDisposable {
 
         [Endpoint("/callme")]
         public HttpResponse<string> CallMe() => HttpResponse.Ok("Hello World!");
+
+        public static readonly MethodInfo IThrowErrorsMethod = typeof(SimpleEndpoint).GetMethod(nameof(IThrowErrors), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Failed getting error method");
+        public static readonly EndpointAttribute IThrowErrorsMethodEndpointAttribute = IThrowErrorsMethod.GetCustomAttribute<EndpointAttribute>() ?? throw new Exception("Failed getting endpoint attribute");
+
+        [Endpoint("/throwserrors")]
+        public HttpResponse IThrowErrors() => throw new Exception("I was an exception");
+
+        [EndpointExceptionHandler(typeof(Exception))]
+        public HttpResponse GenericExceptionHandler(Exception exception) => HttpResponse.InternalServerError(exception.Message);
 
     }
 
@@ -93,6 +99,35 @@ public sealed class AutumnHttpServerTest : IDisposable {
         Assert.True(response.IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Hello World!", responseReader.ReadToEnd());
+
+    }
+
+    [Fact]
+    public void CanHandleErrors() {
+
+        // Init context
+        AutumnAppContext appContext = new AutumnAppContext();
+        appContext.RegisterComponent(new StaticPropertySource(DefaultConfig()));
+
+        // Create endpoint
+        SimpleEndpoint endpoint = new SimpleEndpoint();
+        appContext.RegisterComponent(endpoint);
+
+        // Create server and start it
+        server = new AutumnHttpServer(appContext);
+        server.RegisterEndpoint(endpoint, SimpleEndpoint.IThrowErrorsMethod, SimpleEndpoint.IThrowErrorsMethodEndpointAttribute);
+        Task serverTask = Task.Run(server.Start);
+
+        // Assert it's running
+        TimedAssert.True(() => server.IsListening);
+
+        // Get http client and call our rendpoint
+        HttpClient client = DefaultHttpClient();
+        HttpResponseMessage response = client.Send(new HttpRequestMessage(HttpMethod.Get, "http://localhost:8080/throwserrors"));
+        using StreamReader responseReader = new StreamReader(response.Content.ReadAsStream());
+
+        // Assert on endpoint response
+        Assert.Equal("I was an exception", responseReader.ReadToEnd());
 
     }
 

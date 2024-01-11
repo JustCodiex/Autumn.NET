@@ -53,6 +53,13 @@ public abstract class HttpResponse : IHttpResponseMapper {
     /// <summary>
     /// Creates a new <see cref="HttpResponse{T}"/> object with a status code of 500 (Internal Server Error) and an optional message.
     /// </summary>
+    /// <param name="message">The message to include in the response. Optional.</param>
+    /// <returns>A new HttpResponse object with a 500 status code.</returns>
+    public static HttpResponse InternalServerError(string message = "Internal Server Error") => new HttpErrorResponse<object>() { StatusCode = 500, Descriptor = message };
+
+    /// <summary>
+    /// Creates a new <see cref="HttpResponse{T}"/> object with a status code of 500 (Internal Server Error) and an optional message.
+    /// </summary>
     /// <typeparam name="T">The type of the response.</typeparam>
     /// <param name="message">The message to include in the response. Optional.</param>
     /// <returns>A new HttpResponse object with a 500 status code.</returns>

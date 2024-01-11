@@ -24,9 +24,11 @@ public sealed class AutumnHttpServer {
         HttpEndpointMethod? PostMethod, 
         HttpEndpointMethod? PutMethod, 
         HttpEndpointMethod? DeleteMethod);
+    private record HttpEndpointExceptionHandler(MethodInfo Info);
 
     private readonly AutumnAppContext _appContext;
     private readonly Dictionary<string, HttpEndpoint> _endpoints;
+    private readonly Dictionary<object, Dictionary<Type, HttpEndpointExceptionHandler>> _endpointExceptionHandlers;
     private readonly ReaderWriterLockSlim _endpointsLock;
 
     private readonly HttpListener _listener;
@@ -56,6 +58,7 @@ public sealed class AutumnHttpServer {
         _appContext = context;
         _endpoints = new();
         _endpointsLock = new ReaderWriterLockSlim();
+        _endpointExceptionHandlers = new();
         _listener = new HttpListener();
     }
 
@@ -123,6 +126,17 @@ public sealed class AutumnHttpServer {
         }
         var newHandler = OverrideMethod(new HttpEndpoint(endpoint, null, null, null, null), endpointAttribute.Method, endpointMethod);
         _endpoints.Add(endpoint, newHandler);
+        RegisterEndpointExceptionHandler(target);
+    }
+
+    private void RegisterEndpointExceptionHandler(object target) {
+        var handlers = target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance).Select(x => (x, x.GetCustomAttribute<EndpointExceptionHandlerAttribute>())).Where(x => x.Item2 is not null).ToArray();
+        Dictionary<Type, HttpEndpointExceptionHandler> endpointHandlers = new();
+        for (int i = 0; i < handlers.Length; i++) {
+            var (method, attrib) = handlers[i];
+            endpointHandlers[attrib!.ExceptionType] = new HttpEndpointExceptionHandler(method);
+        }
+        _endpointExceptionHandlers[target] = endpointHandlers;
     }
 
     /// <summary>
@@ -234,24 +248,32 @@ public sealed class AutumnHttpServer {
         }
 
         // Invoke
-        object? result = null;
         try {
-            result = handler.Info.Invoke(handler.Target, callArgs);
+            try {
+                object? result = handler.Info.Invoke(handler.Target, callArgs);
+                if (!isHeadMethod && result is not null && handler.Info.ReturnType != typeof(void)) {
+                    ContentTypeAttribute? contentTypeOverride = handler.Info.ReturnParameter.GetCustomAttribute<ContentTypeAttribute>();
+                    listenerContext.Response.StatusCode = MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
+                    listenerContext.Response.OutputStream.Close();
+                    return;
+                }
+            } catch (TargetInvocationException handlerException) {
+                Exception actualException = handlerException.InnerException!;
+                int status = HandleException(listenerContext.Response, handler.Target, actualException, session);
+                listenerContext.Response.OutputStream.Close();
+                listenerContext.Response.StatusCode = status;
+                return;
+            }
         } catch (Exception ex) {
             listenerContext.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
             listenerContext.Response.StatusDescription = ex.Message;
             listenerContext.Response.Close();
+            throw;
         }
 
-        // Return
-        if (!isHeadMethod && result is not null && handler.Info.ReturnType != typeof(void)) {
-            ContentTypeAttribute? contentTypeOverride = handler.Info.ReturnParameter.GetCustomAttribute<ContentTypeAttribute>();
-            listenerContext.Response.StatusCode = MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
-            listenerContext.Response.OutputStream.Close();
-        } else {
-            listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
-            listenerContext.Response.Close();
-        }
+        // Return standard OK (HEAD method or void method invoked)
+        listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
+        listenerContext.Response.Close();
 
     }
 
@@ -387,6 +409,39 @@ public sealed class AutumnHttpServer {
         string contentTypeHeader = contentType is null ? defaultType : contentType.ContentType;
         foreach (var contentTypeEntry in contentTypeHeader.Split(';'))
             response.Headers.Add("Content-Type", contentTypeEntry);
+    }
+
+    private int HandleException(HttpListenerResponse response, object target, Exception exception, IHttpSession? session) {
+        HttpEndpointExceptionHandler? exceptionHandler = null;
+        if (this._endpointExceptionHandlers.TryGetValue(target, out var handlers)) {
+            if (!handlers.TryGetValue(exception.GetType(), out exceptionHandler)) {
+                exceptionHandler = handlers.Where(x => x.Key.GetType().IsAssignableTo(exception.GetType()))
+                    .Select(x => x.Value)
+                    .FirstOrDefault();
+            }
+        }
+        if (exceptionHandler is not null) {
+            object? result = InvokeExceptionHandler(target, exceptionHandler.Info, exception, session);
+            if (result is not null) {
+                return MapObjectToHttpResponse(result, response, null);
+            }
+        }
+        return (int)HttpStatusCode.InternalServerError;
+    }
+
+    private object? InvokeExceptionHandler(object target, MethodInfo method, Exception exception, IHttpSession? session) {
+        ParameterInfo[] methodArgs = method.GetParameters();
+        object?[] callArgs = new object[methodArgs.Length];
+        for (int i = 0; i < callArgs.Length; i++) {
+            if (methodArgs[i].ParameterType.IsSubclassOf(typeof(IHttpSession)) || methodArgs[i].ParameterType == typeof(IHttpSession)) { // The session object is specifically requested
+                callArgs[i] = session;
+            } else if (methodArgs[i].GetCustomAttribute<InjectAttribute>() is InjectAttribute injectAttribute) {
+                callArgs[i] = _appContext.SolveInjectDependency(methodArgs[i].ParameterType, methodArgs[i].Name ?? string.Empty, injectAttribute, session);
+            } else if (methodArgs[i].ParameterType.IsSubclassOf(exception.GetType()) || methodArgs[i].ParameterType == exception.GetType()) {
+                callArgs[i] = exception;
+            }
+        }
+        return method.Invoke(target, callArgs);
     }
 
     /// <summary>
