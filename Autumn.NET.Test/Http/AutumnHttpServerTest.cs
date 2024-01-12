@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Reflection;
+using System.Text;
 
-using Autumn.Annotations;
 using Autumn.Context;
 using Autumn.Context.Configuration;
 using Autumn.Http;
@@ -17,6 +17,8 @@ public sealed class AutumnHttpServerTest : IDisposable {
     private static readonly Func<Dictionary<string, object?>> DefaultConfig = () => new Dictionary<string, object?>() {
         { "autumn.http.port", "8080" }
     };
+
+    private static readonly Func<string, StaticPropertySource> ConfigOf = x => (StaticPropertySource)(new ConfigFactory().LoadConfig("application.yaml", new MemoryStream(Encoding.UTF8.GetBytes(x))))!;
 
     private AutumnHttpServer? server;
 
@@ -137,7 +139,7 @@ public sealed class AutumnHttpServerTest : IDisposable {
         public static readonly EndpointAttribute CounterMethodEndpointAttribute = CounterMethod.GetCustomAttribute<EndpointAttribute>() ?? throw new Exception("Failed getting endpoint attribute");
 
         [Endpoint("/counter", Method = "POST")]
-        public int Counter([Inject] IHttpSession session) {
+        public int Counter(IHttpSession session) {
             int counter = session.GetSessionValue<int>("count");
             counter++;
             session.StoreSessionValue("count", counter);
@@ -189,6 +191,91 @@ public sealed class AutumnHttpServerTest : IDisposable {
         Assert.True(response.IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("2", responseReader.ReadToEnd());
+
+    }
+
+    private class ComplexSessionEndpoint {
+
+        public static readonly MethodInfo CounterAMethod = typeof(ComplexSessionEndpoint).GetMethod(nameof(CounterA), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Failed getting counter method");
+        public static readonly EndpointAttribute CounterAMethodEndpointAttribute = CounterAMethod.GetCustomAttribute<EndpointAttribute>() ?? throw new Exception("Failed getting endpoint attribute");
+
+        [Endpoint("/serviceA/counter", Method = "PUT")]
+        public int CounterA(IHttpSession session) => count(session);
+
+        public static readonly MethodInfo CounterBMethod = typeof(ComplexSessionEndpoint).GetMethod(nameof(CounterB), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Failed getting counter method");
+        public static readonly EndpointAttribute CounterBMethodEndpointAttribute = CounterBMethod.GetCustomAttribute<EndpointAttribute>() ?? throw new Exception("Failed getting endpoint attribute");
+
+        [Endpoint("/serviceB/counter", Method = "PUT")]
+        public int CounterB(IHttpSession session) => count(session);
+
+        private static int count(IHttpSession session) {
+            int counter = session.GetSessionValue<int>("count");
+            counter++;
+            session.StoreSessionValue("count", counter);
+            return counter;
+        }
+
+    }
+
+    [Fact]
+    public void CanHandleMultipleSessionsPerPath() {
+
+        string cfgStr = """
+            autumn:
+                http:
+                    port: 8080
+                    session:
+                        management:
+                            enabled: true
+                            type: Autumn.Http.Sessions.AutumnHttpPathSessionManager
+                            manager:
+                                paths:
+                                    - path: /serviceA/
+                                      manager: Autumn.Http.Sessions.AutumnHttpSessionManager
+                                    - path: /serviceB/
+                                      manager: Autumn.Http.Sessions.AutumnHttpSessionManager
+                                      token-name: _sesh
+            """;
+        var cfg = ConfigOf(cfgStr);
+
+        // Init context
+        AutumnAppContext appContext = new AutumnAppContext();
+        appContext.RegisterComponent(new AutumnScheduler());
+        appContext.RegisterComponent(cfg);
+
+        // Create endpoint
+        ComplexSessionEndpoint endpoint = new ComplexSessionEndpoint();
+
+        // Create server and start it
+        server = new AutumnHttpServer(appContext);
+        server.RegisterEndpoint(endpoint, ComplexSessionEndpoint.CounterAMethod, ComplexSessionEndpoint.CounterAMethodEndpointAttribute);
+        server.RegisterEndpoint(endpoint, ComplexSessionEndpoint.CounterBMethod, ComplexSessionEndpoint.CounterBMethodEndpointAttribute);
+        Task serverTask = Task.Run(server.Start);
+
+        // Assert it's running
+        TimedAssert.True(() => server.IsListening);
+
+        // Get http client and call our rendpoint
+        var (client, cookies) = DefaultCookieHttpClient();
+        Assert.True(cookies.Count == 0);
+        HttpResponseMessage response = client.Send(new HttpRequestMessage(HttpMethod.Put, "http://localhost:8080/serviceA/counter"));
+        StreamReader responseReader = new StreamReader(response.Content.ReadAsStream());
+
+        // Assert on endpoint response
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("1", responseReader.ReadToEnd());
+        Assert.Contains(cookies.GetAllCookies(), x => x.Name == "_s");
+
+        // Get http client and call our rendpoint
+        response = client.Send(new HttpRequestMessage(HttpMethod.Put, "http://localhost:8080/serviceB/counter"));
+        responseReader = new StreamReader(response.Content.ReadAsStream());
+
+        // Assert on endpoint response
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("1", responseReader.ReadToEnd());
+        Assert.Contains(cookies.GetAllCookies(), x => x.Name == "_sesh");
 
     }
 

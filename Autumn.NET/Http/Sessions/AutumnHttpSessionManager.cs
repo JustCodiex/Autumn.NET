@@ -1,6 +1,8 @@
 ﻿using System.Net;
 
+using Autumn.Annotations;
 using Autumn.Context.Configuration;
+using Autumn.Functional;
 
 namespace Autumn.Http.Sessions;
 
@@ -21,14 +23,20 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
     /// Initializes a new instance of the <see cref="AutumnHttpSessionManager"/> with specified static properties.
     /// </summary>
     /// <param name="staticPropertySource">The static property source containing configuration settings.</param>
-    public AutumnHttpSessionManager(StaticPropertySource staticPropertySource) {
+    public AutumnHttpSessionManager([Inject] StaticPropertySource staticPropertySource) : this(staticPropertySource.GetValues("autumn.http.session.management")) {}
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IDictionary{String, Object}"/> with specified static properties.
+    /// </summary>
+    /// <param name="parameters">The dictionary containing configuration settings.</param>
+    public AutumnHttpSessionManager(IDictionary<string, object?> parameters) {
         this.sessions = new();
-        if (staticPropertySource.GetValueOrDefault("autumn.http.session.management.token-type", "cookie")?.ToLowerInvariant() is "query-param") {
+        if (parameters.GetOrElse("token-type", "cookie")?.ToLowerInvariant() is "query-param") {
             this.tokenIsQueryParameter = true;
         }
-        this.tokenName = staticPropertySource.GetValueOrDefault("autumn.http.session.management.token-name", "_s") ?? "_s";
-        this.sessionLifeTime = staticPropertySource.GetValueOrDefault("autumn.http.session.management.time", 30.0);
-        this.sessionLifeExtension = staticPropertySource.GetValueOrDefault("autumn.http.session.management.extension-time", 2.5);
+        this.tokenName = parameters.GetOrElse("token-name", "_s") ?? "_s";
+        this.sessionLifeTime = parameters.GetOrElse("time", 30.0);
+        this.sessionLifeExtension = parameters.GetOrElse("extension-time", 2.5);
     }
 
     /// <inheritdoc/>

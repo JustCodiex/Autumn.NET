@@ -213,6 +213,9 @@ public sealed class AutumnAppContext {
 
     internal delegate (bool, object?) InjectParameterHandler(IInjectAnnotation annotation, ParameterInfo parameterInfo);
 
+    internal object? CreateContextObject(Type componentType, object[] args)
+        => CreateContextObjectInternal(componentType, null, null, args, null);
+
     internal object? CreateContextObject(Type componentType, Action<object>? constructed, object[] args) 
         => CreateContextObjectInternal(componentType, null, constructed, args, null);
 
@@ -259,6 +262,7 @@ public sealed class AutumnAppContext {
 
         // Get constructors
         var ctors = klass.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        List<(ConstructorInfo?, object?[], int)> candidates = new();
         foreach (var ctor in ctors) {
             var ctorArgs = ctor.GetParameters();
             if (ctor.GetCustomAttribute<InjectAttribute>() is not null) {
@@ -267,24 +271,35 @@ public sealed class AutumnAppContext {
                 var attributedArgs = ctorArgs.Select(x => (x, GetInjectAttribute(x))).ToArray();
                 var injectArgs = attributedArgs.Where(x => x.Item2 is not null).ToArray();
                 var passArgs = attributedArgs.Where(x => x.Item2 is null).ToArray();
-                if (passArgs.Length == args.Length && passArgs.Zip(args).All(x => x.Second.GetType().IsAssignableTo(x.First.x.ParameterType))) {
-                    var callArgs = new object?[ctorArgs.Length];
-                    int j = 0;
-                    for (int i = 0; i < callArgs.Length; i++) {
-                        if (attributedArgs[i].Item2 is InjectAttribute inject) {
-                            callArgs[i] = SolveInjectDependencyInternal(attributedArgs[i].x.ParameterType, attributedArgs[i].x.Name!, inject, scopeContext);
-                        } else if (injectHandler is not null && attributedArgs[i].Item2 is IInjectAnnotation iij) {
-                            var (found, value) = injectHandler(iij, attributedArgs[i].x);
-                            callArgs[i] = found ? value : passArgs[j++];
-                        } else {
-                            callArgs[i] = args[j++];
-                        }
-                    }
-                    return (ctor, callArgs);
+                if (passArgs.Length == args.Length && ctorArgs.Length == args.Length && passArgs.Zip(args).All(x => x.Second.GetType().IsAssignableTo(x.First.x.ParameterType))) {
+                    candidates.Add((ctor, args, 0));
+                    continue;
                 }
+                var callArgs = new object?[ctorArgs.Length];
+                int j = 0;
+                for (int i = 0; i < callArgs.Length; i++) {
+                    if (attributedArgs[i].Item2 is InjectAttribute inject) {
+                        callArgs[i] = SolveInjectDependencyInternal(attributedArgs[i].x.ParameterType, attributedArgs[i].x.Name!, inject, scopeContext);
+                    } else if (injectHandler is not null && attributedArgs[i].Item2 is IInjectAnnotation iij) {
+                        var (found, value) = injectHandler(iij, attributedArgs[i].x);
+                        callArgs[i] = found ? value : passArgs[j++];
+                    } else if (j < args.Length && args[j].GetType().IsAssignableTo(ctorArgs[i].ParameterType)) {
+                        callArgs[i] = args[j++];
+                    }
+                }
+                candidates.Add((ctor, callArgs, 1));
             }
         }
-
+        if (candidates.Count is 1) {
+            return (candidates[0].Item1, candidates[0].Item2);
+        } else if (candidates.Count > 1) {
+            var best = candidates[0];
+            for (int i = 1; i < candidates.Count; i++) {
+                if (candidates[i].Item3 < best.Item3)
+                    best = candidates[i];
+            }
+            return (best.Item1, best.Item2); 
+        }
         return (null, Array.Empty<object>());
 
     }

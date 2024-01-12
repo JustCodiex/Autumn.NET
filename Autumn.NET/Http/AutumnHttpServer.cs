@@ -104,7 +104,7 @@ public sealed class AutumnHttpServer {
         if (type is null) {
             return; // TODO: Log
         }
-        _sessionManager = _appContext.GetInstanceOf(type, staticPropertySource) as IHttpSessionManager;
+        _sessionManager = _appContext.GetInstanceOf(type) as IHttpSessionManager;
         if (_sessionManager is not null) {
             AutumnScheduler scheduler = _appContext.GetInstanceOf<AutumnScheduler>();
             scheduler.Schedule(_sessionManager, type.GetMethod(nameof(IHttpSessionManager.DestroyInactiveSessions), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Unable to schedule session destruction"), Schedule.EveryNthSecond(30));
