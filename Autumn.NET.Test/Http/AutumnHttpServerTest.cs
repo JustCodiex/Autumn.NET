@@ -1,11 +1,13 @@
 ﻿using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 
 using Autumn.Context;
 using Autumn.Context.Configuration;
 using Autumn.Http;
 using Autumn.Http.Annotations;
+using Autumn.Http.Interceptors;
 using Autumn.Http.Sessions;
 using Autumn.Scheduling;
 using Autumn.Test.TestHelpers;
@@ -276,6 +278,100 @@ public sealed class AutumnHttpServerTest : IDisposable {
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("1", responseReader.ReadToEnd());
         Assert.Contains(cookies.GetAllCookies(), x => x.Name == "_sesh");
+
+    }
+
+    private class RequestResponse : IHttpRequestInterceptor, IHttpResponseInterceptor {
+
+        public List<string> Requests { get; set; } = [];
+
+        public List<string> Responses { get; set; } = [];
+
+        public bool HandleError(HttpListenerResponse response, IHttpSession? session) => true;
+
+        public bool Intercept(IHttpRequest request, IHttpSession? session) {
+            Requests.Add(request.GetBodyAsString());
+            request.ResetBodyStreamPosition();
+            return true;
+        }
+
+        public bool Intercept(object interceptedResult, HttpListenerResponse response, IHttpSession? session, out object result) {
+            Responses.Add(interceptedResult.ToString()!);
+            result = interceptedResult;
+            return true;
+        }
+
+    }
+
+    private class CalculatorEndpoint {
+
+        public static readonly MethodInfo AdderMethod = typeof(CalculatorEndpoint).GetMethod(nameof(Adder), BindingFlags.Public | BindingFlags.Instance) ?? throw new Exception("Failed getting adder method");
+        public static readonly EndpointAttribute AdderEndpointAttribute = AdderMethod.GetCustomAttribute<EndpointAttribute>() ?? throw new Exception("Failed getting endpoint attribute");
+
+        public class Payload {
+            public int X { get; set; }
+            public int Y { get; set; }
+        }
+
+        [Endpoint("/add", Method = "POST")]
+        public int Adder([Body] Payload body) => body.X + body.Y;
+
+    }
+
+    [Fact]
+    public void CanIntercept() {
+
+        // Get config
+        string cfgStr = $"""
+            autumn:
+                http:
+                    port: 8080
+                    flow:
+                        interceptors:
+                        -  {typeof(RequestResponse).FullName!}
+            """;
+        var cfg = ConfigOf(cfgStr);
+
+        // Create RR
+        var rr = new RequestResponse();
+
+        // Init context
+        AutumnAppContext appContext = new AutumnAppContext();
+        appContext.RegisterComponent(new AutumnScheduler());
+        appContext.RegisterComponent(rr);
+        appContext.RegisterComponent(cfg);
+
+        // Create endpoint
+        CalculatorEndpoint endpoint = new CalculatorEndpoint();
+
+        // Create server and start it
+        server = new AutumnHttpServer(appContext);
+        server.RegisterEndpoint(endpoint, CalculatorEndpoint.AdderMethod, CalculatorEndpoint.AdderEndpointAttribute);
+        Task serverTask = Task.Run(server.Start);
+
+        // Assert it's running
+        TimedAssert.True(() => server.IsListening);
+
+        // Get http client and call our rendpoint
+        var (client, cookies) = DefaultCookieHttpClient();
+        Assert.True(cookies.Count == 0);
+        HttpResponseMessage response = client.Send(new HttpRequestMessage(HttpMethod.Post, "http://localhost:8080/add") { 
+            Content = new StringContent(JsonSerializer.Serialize(new CalculatorEndpoint.Payload { 
+                X = 5, 
+                Y = 10 
+            })) 
+        });
+        Assert.True(response.IsSuccessStatusCode);
+        StreamReader responseReader = new StreamReader(response.Content.ReadAsStream());
+        
+        string result = responseReader.ReadToEnd();
+        Assert.Equal("15", result);
+
+        Assert.Single(rr.Requests);
+        Assert.Equal("{\"X\":5,\"Y\":10}", rr.Requests.First());
+
+        Assert.Single(rr.Responses);
+        Assert.Equal("15", rr.Responses.First());
 
     }
 

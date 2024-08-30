@@ -12,6 +12,15 @@ internal static class ContextUtil {
         return GetOrCreateComponentFromProperty<TInterface, TDefault>(appContext, configs[0], property);
     }
 
+    public static object[] GetArrayFromProperty(IConfigSource configSource, string property) {
+        var val = configSource.GetValueOrNull(property);
+        if (val is object[] vals)
+            return vals;
+        if (val is object o)
+            return [o];
+        return [];
+    }
+
     public static TInterface GetOrCreateComponentFromProperty<TInterface, TDefault>(AutumnAppContext appContext, IConfigSource configSource, string property) where TDefault : class, TInterface {
         string targetType = configSource.GetValueOrDefault(property, typeof(TDefault).FullName) ?? string.Empty;
         if (appContext.GetComponentType(targetType) is not Type componentType) {

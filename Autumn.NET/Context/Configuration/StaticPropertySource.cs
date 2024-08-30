@@ -21,6 +21,10 @@ public class StaticPropertySource : IConfigSource {
     /// <inheritdoc/>
     public object? GetValue(string key) => values.TryGetValue(key, out object? obj) ? obj : throw new KeyNotFoundException();
 
+
+    /// <inheritdoc/>
+    public object? GetValueOrNull(string key) => values.TryGetValue(key, out object? obj) ? obj : null;
+
     /// <summary>
     /// Gets the value from the configuration source for the specified key.
     /// </summary>

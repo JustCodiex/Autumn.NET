@@ -31,11 +31,11 @@ public sealed class AutumnAppContext {
     /// </summary>
     public AutumnAppContext() {
         singletonFactory = new SingletonFactory(this);
-        services = new();
-        configurationInstances = new();
-        configSources = new();
-        components = new();
-        interceptedTypes = new();
+        services = [];
+        configurationInstances = [];
+        configSources = [];
+        components = [];
+        interceptedTypes = [];
     }
 
     /// <summary>
@@ -67,11 +67,11 @@ public sealed class AutumnAppContext {
     public void RegisterService(Type serviceType, string qualifier) {
         var creator = new TypeCreator(serviceType, singletonFactory);
         RegisterComponentInternal(serviceType, creator);
-        if (services.ContainsKey(qualifier)) {
-            services[qualifier].Add(creator);
+        if (services.TryGetValue(qualifier, out HashSet<TypeCreator>? value)) {
+            value.Add(creator);
             return;
         }
-        services.Add(qualifier, new() { creator });
+        services.Add(qualifier, [creator]);
     }
 
     /// <summary>
@@ -314,7 +314,7 @@ public sealed class AutumnAppContext {
         }
         if (candidates.Count is 1) {
             var ctorInfo = candidates[0].Item1;
-            return ctorInfo is not null ? ( new ConstructorInstantiator(ctorInfo), candidates[0].Item2) : (null, Array.Empty<object>());
+            return ctorInfo is not null ? (new ConstructorInstantiator(ctorInfo), candidates[0].Item2) : (null, []);
         } else if (candidates.Count > 1) {
             var best = candidates[0];
             for (int i = 1; i < candidates.Count; i++) {
@@ -322,9 +322,9 @@ public sealed class AutumnAppContext {
                     best = candidates[i];
             }
             var ctorInfo = best.Item1;
-            return ctorInfo is not null ? (new ConstructorInstantiator(ctorInfo), best.Item2) : (null, Array.Empty<object>()); 
+            return ctorInfo is not null ? (new ConstructorInstantiator(ctorInfo), best.Item2) : (null, []);
         }
-        return (null, Array.Empty<object>());
+        return (null, []);
 
     }
 
@@ -335,7 +335,7 @@ public sealed class AutumnAppContext {
             throw new NotSupportedException("Factory classes not yet implemented");
         }
 
-        return (null, Array.Empty<object>());
+        return (null, []);
 
     }
 
@@ -358,7 +358,7 @@ public sealed class AutumnAppContext {
 
     private object? GetComponentInternal(ComponentIdentifier identifier, IScopeContext? scopeContext) {
         if (singletonFactory.HasSingleton(identifier)) {
-            return singletonFactory.GetComponent(identifier, Array.Empty<object>(), scopeContext);
+            return singletonFactory.GetComponent(identifier, [], scopeContext);
         }
         if (components.TryGetValue(identifier.ComponentQualifier, out var typesByQualifier)) {
             throw new NotImplementedException();
@@ -366,10 +366,10 @@ public sealed class AutumnAppContext {
         if (components.TryGetValue(identifier.ComponentInstanceType.FullName!, out var typesByType)) {
             var qualifiedByName = typesByType.Where(x => x.Type.Name == identifier.ComponentQualifier).ToList();
             if (qualifiedByName.Count == 1) {
-                return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type), Array.Empty<object>(), scopeContext);
+                return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type), [], scopeContext);
             }
             if (typesByType.Count == 1) {
-                return typesByType.First().Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(typesByType.First().Type), Array.Empty<object>(), scopeContext);
+                return typesByType.First().Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(typesByType.First().Type), [], scopeContext);
             }
             throw new NotImplementedException();
         }
@@ -535,9 +535,9 @@ public sealed class AutumnAppContext {
                 .Where(x => x.Item2 is not null);
         foreach (var (post, p) in postInits) {
             if (p!.AsyncTask) {
-                Task.Run(() => post.Invoke(target, Array.Empty<object>()));
+                Task.Run(() => post.Invoke(target, []));
             } else {
-                post.Invoke(target, Array.Empty<object>());
+                post.Invoke(target, []);
             }
         }
     }
@@ -553,7 +553,7 @@ public sealed class AutumnAppContext {
         var targetMethods = postprocs.Select(x => x.x).Union(exceptionHandlers.Select(x => x.x)).ToArray();
         for (int i = 0; i < targetMethods.Length; i++) {
 
-            var targetPostProcessor = postprocs.Where(x => x.x == targetMethods[i]).Select(x => x.Item2).FirstOrDefault() ?? new List<PostProcessorAttribute>();
+            var targetPostProcessor = postprocs.Where(x => x.x == targetMethods[i]).Select(x => x.Item2).FirstOrDefault() ?? [];
             var targetException = exceptionHandlers.Where(x => x.x == targetMethods[i]).Select(x => x.Item2).FirstOrDefault();
 
         }
@@ -592,10 +592,10 @@ public sealed class AutumnAppContext {
     /// <returns>An array of component instances of the specified type. Returns an empty array if no components are found.</returns>
     public object[] GetComponents(Type type) {
         if (components.TryGetValue(type.FullName!, out var creators)) {
-            var instances = creators.Select(x => x.Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(x.Type), Array.Empty<object>(), null)).ToArray();
+            var instances = creators.Select(x => x.Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(x.Type), [], null)).ToArray();
             return instances;
         }
-        return Array.Empty<object>();
+        return [];
     }
 
     /// <summary>

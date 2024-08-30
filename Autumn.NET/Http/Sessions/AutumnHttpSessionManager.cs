@@ -30,7 +30,7 @@ public class AutumnHttpSessionManager : IHttpSessionManager {
     /// </summary>
     /// <param name="parameters">The dictionary containing configuration settings.</param>
     public AutumnHttpSessionManager(IDictionary<string, object?> parameters) {
-        this.sessions = new();
+        this.sessions = [];
         if (parameters.GetOrElse("token-type", "cookie")?.ToLowerInvariant() is "query-param") {
             this.tokenIsQueryParameter = true;
         }

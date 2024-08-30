@@ -60,9 +60,9 @@ public sealed class AutumnHttpServer {
     /// <param name="context">The application context.</param>
     internal AutumnHttpServer(AutumnAppContext context) {
         _appContext = context;
-        _endpoints = new();
+        _endpoints = [];
         _endpointsLock = new ReaderWriterLockSlim();
-        _endpointExceptionHandlers = new();
+        _endpointExceptionHandlers = [];
         _listener = new HttpListener();
     }
 
@@ -93,13 +93,48 @@ public sealed class AutumnHttpServer {
         _corsAllowedMethodHeader = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors-methods", string.Empty) ?? string.Empty;
         _corsAllowedHeaders = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors-headers", string.Empty) ?? string.Empty;
 
-        _interceptFilters = ContextUtil.GetOrCreateComponentFromProperty<IHttpInterceptorChain, AutumnHttpInterceptorChain>(_appContext, staticPropertySource, "autumn.http.interceptors");
+        _interceptFilters = GetHttpInterceptorChain(staticPropertySource);
 
         if (staticPropertySource.GetValueOrDefault("autumn.http.session.management.enabled", false)) {
             InitSessionManager(staticPropertySource);
         }
 
         _isListenerInitialised = true;
+
+    }
+
+    private IHttpInterceptorChain? GetHttpInterceptorChain(StaticPropertySource staticPropertySource) {
+
+        var interceptors = ContextUtil.GetArrayFromProperty(staticPropertySource, "autumn.http.flow.interceptors");
+        if (interceptors.Length == 0) {
+            return null;
+        }
+
+        string? interceptorClass = staticPropertySource.GetValueOrDefault("autumn.http.flow.interception-manager", typeof(AutumnHttpInterceptorChain).FullName);
+        if (string.IsNullOrEmpty(interceptorClass)) {
+            return null; // TODO: Log
+        }
+        Type? type = _appContext.GetComponentType(interceptorClass);
+        if (type is null) {
+            return null; // TODO: Log
+        }
+        IHttpInterceptorChain? chain = _appContext.GetInstanceOf(type) as IHttpInterceptorChain;
+        if (chain is not null) {
+            foreach (var interceptorTypeStr in interceptors) {
+                var interceptorType = _appContext.GetComponentType(interceptorTypeStr.ToString()!);
+                if (interceptorType is null) {
+                    // TODO: Log
+                    continue;
+                }
+                var interceptor = _appContext.GetInstanceOf(interceptorType);
+                if (interceptor is IHttpRequestInterceptor requestInterceptor)
+                    chain.AddInterceptor(requestInterceptor);
+                if (interceptor is IHttpResponseInterceptor responseInterceptor)
+                    chain.AddInterceptor(responseInterceptor);
+            }
+        }
+
+        return chain;
 
     }
 
@@ -139,7 +174,7 @@ public sealed class AutumnHttpServer {
 
     private void RegisterEndpointExceptionHandler(object target) {
         var handlers = target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance).Select(x => (x, x.GetCustomAttribute<EndpointExceptionHandlerAttribute>())).Where(x => x.Item2 is not null).ToArray();
-        Dictionary<Type, HttpEndpointExceptionHandler> endpointHandlers = new();
+        Dictionary<Type, HttpEndpointExceptionHandler> endpointHandlers = [];
         for (int i = 0; i < handlers.Length; i++) {
             var (method, attrib) = handlers[i];
             endpointHandlers[attrib!.ExceptionType] = new HttpEndpointExceptionHandler(method);
@@ -198,8 +233,11 @@ public sealed class AutumnHttpServer {
 
     private void HandleIncoming(HttpListenerContext listenerContext) {
 
+        // Copy request into a more dynamic class
+        using AutumnHttpRequest request = new AutumnHttpRequest(listenerContext.Request);
+
         // Get request url
-        Uri? requestUrl = listenerContext.Request.Url;
+        Uri? requestUrl = request.Url;
         if (requestUrl is null) {
             listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
             listenerContext.Response.Close();
@@ -226,9 +264,9 @@ public sealed class AutumnHttpServer {
         listenerContext.Response.Headers.Add("Access-Control-Allow-Headers", this._corsAllowedHeaders);
 
         // Get handler
-        bool isHeadMethod = listenerContext.Request.HttpMethod.Equals("HEAD", StringComparison.InvariantCultureIgnoreCase);
-        bool isOptionsMethod = listenerContext.Request.HttpMethod.Equals("OPTIONS", StringComparison.InvariantCultureIgnoreCase); // TODO: Handle better
-        var handler = listenerContext.Request.HttpMethod.ToUpper() switch {
+        bool isHeadMethod = request.HttpMethod.Equals("HEAD", StringComparison.InvariantCultureIgnoreCase);
+        bool isOptionsMethod = request.HttpMethod.Equals("OPTIONS", StringComparison.InvariantCultureIgnoreCase); // TODO: Handle better
+        var handler = request.HttpMethod.ToUpper() switch {
             "GET" => endpoint.GetMethod,
             "HEAD" => endpoint.GetMethod,
             "POST" => endpoint.PostMethod,
@@ -250,9 +288,14 @@ public sealed class AutumnHttpServer {
             // Run session expired handler
         }
 
+        // Run the interceptor/filter chain
+        if (!(_interceptFilters?.OnRequest(request, listenerContext.Response, session) ?? true)) {
+            return; // The interceptor has already responded
+        }
+
         // Map to arguments
         object?[] callArgs = MapQueryParameters(query, handler.Info, session);
-        if (!GetRequestBody(listenerContext, callArgs, handler.Info)) {
+        if (!GetRequestBody(request, callArgs, handler.Info)) {
             listenerContext.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
             listenerContext.Response.Close();
             return;
@@ -263,8 +306,12 @@ public sealed class AutumnHttpServer {
             try {
                 object? result = handler.Info.Invoke(handler.Target, callArgs);
                 if (!isHeadMethod && result is not null && handler.Info.ReturnType != typeof(void)) {
+                    object interceptedResult = result;
+                    if (_interceptFilters is not null && _interceptFilters.OnResponse(result, listenerContext.Response, session, out object tempResult)) {
+                        interceptedResult = tempResult;
+                    }
                     ContentTypeAttribute? contentTypeOverride = handler.Info.ReturnParameter.GetCustomAttribute<ContentTypeAttribute>();
-                    listenerContext.Response.StatusCode = MapObjectToHttpResponse(result, listenerContext.Response, contentTypeOverride);
+                    listenerContext.Response.StatusCode = MapObjectToHttpResponse(interceptedResult, listenerContext.Response, contentTypeOverride);
                     listenerContext.Response.OutputStream.Close();
                     return;
                 }
@@ -288,9 +335,9 @@ public sealed class AutumnHttpServer {
 
     }
 
-    private Dictionary<string, string> ParseQuery(Uri uri) {
+    private static Dictionary<string, string> ParseQuery(Uri uri) {
         string query = uri.Query.TrimStart('?');
-        Dictionary<string, string> result = new();
+        Dictionary<string, string> result = [];
         string[] parameters = query.Split('&', StringSplitOptions.RemoveEmptyEntries);
         for (int i = 0; i < parameters.Length; i++) {
             int eq = parameters[i].IndexOf('=');
@@ -320,7 +367,7 @@ public sealed class AutumnHttpServer {
         return callArgs;
     }
 
-    private bool GetRequestBody(HttpListenerContext context, object?[] currentArgs, MethodInfo methodInfo) {
+    private bool GetRequestBody(IHttpRequest request, object?[] currentArgs, MethodInfo methodInfo) {
         ParameterInfo[] parameterInfos = methodInfo.GetParameters();
         ParameterInfo? bodyParameter = parameterInfos.FirstOrDefault(x => x.GetCustomAttribute<BodyAttribute>() is not null);
         if (bodyParameter is null) {
@@ -328,7 +375,7 @@ public sealed class AutumnHttpServer {
         }
 
         int bodyParameterIndex = Array.IndexOf(parameterInfos, bodyParameter);
-        if (!context.Request.HasEntityBody) {
+        if (!request.HasEntityBody) {
             return false;
         }
 
@@ -337,10 +384,9 @@ public sealed class AutumnHttpServer {
         }
 
         // Else, try through json
-        switch (context.Request.ContentType?.ToLower()) {
+        switch (request.ContentType?.ToLower()) {
             case "text/plain" or "text/html" when bodyParameter.ParameterType == typeof(string): {
-                using var streamReader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
-                currentArgs[bodyParameterIndex] = streamReader.ReadToEnd();
+                currentArgs[bodyParameterIndex] = request.GetBodyAsString();
                 return true;
             }
             case "application/xml":
@@ -351,7 +397,7 @@ public sealed class AutumnHttpServer {
             case "application/json":
             default:
                 try {
-                    currentArgs[bodyParameterIndex] = JsonSerializer.Deserialize(context.Request.InputStream, bodyParameter.ParameterType, options: _serializerOptions);
+                    currentArgs[bodyParameterIndex] = JsonSerializer.Deserialize(request.BodyStream, bodyParameter.ParameterType, options: _serializerOptions);
                 } catch {
                     return false;
                 }
@@ -360,7 +406,7 @@ public sealed class AutumnHttpServer {
         
     }
 
-    private object? MapStringToType(string value, Type targetType) {
+    private static object? MapStringToType(string value, Type targetType) {
         if (targetType == typeof(string)) {
             return value;
         } else if (targetType == typeof(float) && float.TryParse(value, out float f)) {
@@ -379,7 +425,7 @@ public sealed class AutumnHttpServer {
         return null;
     }
 
-    private string SanitiseQueryString(string value) // https://documentation.n-able.com/N-central/userguide/Content/Further_Reading/API_Level_Integration/API_Integration_URLEncoding.html (TODO: Add remaining)
+    private static string SanitiseQueryString(string value) // https://documentation.n-able.com/N-central/userguide/Content/Further_Reading/API_Level_Integration/API_Integration_URLEncoding.html (TODO: Add remaining)
         => value.Replace("%20", " ").Replace("%2B", "+").Replace("%24", "$").Replace("%26", "&");
 
     private bool GetSession(HttpListenerContext context, Dictionary<string, string> queryParams, out IHttpSession? session) {
@@ -416,7 +462,7 @@ public sealed class AutumnHttpServer {
         return status;
     }
 
-    private void SetContentTypeOrDefault(HttpListenerResponse response, ContentTypeAttribute? contentType, string defaultType) {
+    private static void SetContentTypeOrDefault(HttpListenerResponse response, ContentTypeAttribute? contentType, string defaultType) {
         string contentTypeHeader = contentType is null ? defaultType : contentType.ContentType;
         foreach (var contentTypeEntry in contentTypeHeader.Split(';'))
             response.Headers.Add("Content-Type", contentTypeEntry);

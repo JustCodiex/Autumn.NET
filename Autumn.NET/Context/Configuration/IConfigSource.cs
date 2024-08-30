@@ -16,8 +16,16 @@ public interface IConfigSource {
     /// Gets the value from the configuration source for the specified key.
     /// </summary>
     /// <param name="key">The key of the value to retrieve.</param>
-    /// <returns>The value associated with the key, or null if the key is not found.</returns>
+    /// <returns>The value associated with the key.</returns>
+    /// <exception cref="KeyNotFoundException"/>
     object? GetValue(string key);
+
+    /// <summary>
+    /// Gets the value from the configuration source for the specified key.
+    /// </summary>
+    /// <param name="key">The key of the value to retrieve.</param>
+    /// <returns>The value associated with the key, or null if the key is not found.</returns>
+    object? GetValueOrNull(string key);
 
     /// <summary>
     /// Gets the value from the configuration source for the specified key.
