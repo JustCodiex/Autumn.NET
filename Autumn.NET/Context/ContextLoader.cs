@@ -70,7 +70,7 @@ internal sealed class ContextLoader {
         // Get domain types and load them as well
         var domainTypes = assemblyDictionary.Values
             .SelectMany(x => x.GetExportedTypes())
-            .Where(x => !string.IsNullOrEmpty(x.Namespace) && scanNamespaces.FindIndex(x.Namespace.StartsWith) is int i && i != -1);
+            .Where(x => !string.IsNullOrEmpty(x.Namespace) && ((scanNamespaces.FindIndex(x.Namespace.StartsWith) is int i && i != -1) || scanNamespaces.Count == 0));
 
         // Load components
         var components = domainTypes.Select(x => (x, x.GetCustomAttribute<ComponentAttribute>()))

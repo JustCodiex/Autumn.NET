@@ -21,4 +21,9 @@ public sealed class InjectAttribute : Attribute, IInjectAnnotation {
     /// </remarks>
     public Type? ConcreteType { get; set; }
 
+    /// <summary>
+    /// Provides the compile-time arguments to provide to a factory method to construct the injected value
+    /// </summary>
+    public object?[]? FactoryArguments { get; set; } = null;
+
 }

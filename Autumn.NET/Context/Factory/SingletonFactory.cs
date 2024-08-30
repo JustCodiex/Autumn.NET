@@ -29,6 +29,13 @@ internal class SingletonFactory : IComponentFactory {
 
     public void RegisterSingleton(ComponentIdentifier identifier, object singleton) {
         componentInstances[identifier] = singleton;
+        Type[] interfaces = identifier.ComponentInstanceType.GetInterfaces();
+        for (int i = 0; i <  interfaces.Length; i++) {
+            var interfaceIdentifier = ComponentIdentifier.DefaultIdentifier(interfaces[i]);
+            if (!HasSingleton(interfaceIdentifier)) {
+                componentInstances[interfaceIdentifier] = singleton;
+            }       
+        }
     }
 
 }

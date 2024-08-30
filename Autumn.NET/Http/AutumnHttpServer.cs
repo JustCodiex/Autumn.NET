@@ -8,6 +8,7 @@ using Autumn.Annotations;
 using Autumn.Context;
 using Autumn.Context.Configuration;
 using Autumn.Http.Annotations;
+using Autumn.Http.Interceptors;
 using Autumn.Http.Sessions;
 using Autumn.Scheduling;
 
@@ -34,9 +35,12 @@ public sealed class AutumnHttpServer {
     private readonly HttpListener _listener;
 
     private JsonSerializerOptions _serializerOptions = new();
-    private string _corsHeader = string.Empty;
+    private string _corsAllowedOriginHeader = string.Empty;
+    private string _corsAllowedMethodHeader = string.Empty;
+    private string _corsAllowedHeaders = string.Empty;
 
     private IHttpSessionManager? _sessionManager;
+    private IHttpInterceptorChain? _interceptFilters;
 
     private bool _isListenerInitialised;
 
@@ -85,7 +89,11 @@ public sealed class AutumnHttpServer {
 
         _listener.Prefixes.Add(sb.Append(host).Append(':').Append(port).Append('/').ToString());
 
-        _corsHeader = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors", string.Empty) ?? string.Empty;
+        _corsAllowedOriginHeader = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors", string.Empty) ?? string.Empty;
+        _corsAllowedMethodHeader = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors-methods", string.Empty) ?? string.Empty;
+        _corsAllowedHeaders = staticPropertySource.GetValueOrDefault("autumn.http.headers.cors-headers", string.Empty) ?? string.Empty;
+
+        _interceptFilters = ContextUtil.GetOrCreateComponentFromProperty<IHttpInterceptorChain, AutumnHttpInterceptorChain>(_appContext, staticPropertySource, "autumn.http.interceptors");
 
         if (staticPropertySource.GetValueOrDefault("autumn.http.session.management.enabled", false)) {
             InitSessionManager(staticPropertySource);
@@ -212,8 +220,14 @@ public sealed class AutumnHttpServer {
             _endpointsLock.ExitReadLock();
         }
 
+        // Add CORS headers
+        listenerContext.Response.Headers.Add("Access-Control-Allow-Origin", this._corsAllowedOriginHeader);
+        listenerContext.Response.Headers.Add("Access-Control-Allow-Methods", this._corsAllowedMethodHeader);
+        listenerContext.Response.Headers.Add("Access-Control-Allow-Headers", this._corsAllowedHeaders);
+
         // Get handler
         bool isHeadMethod = listenerContext.Request.HttpMethod.Equals("HEAD", StringComparison.InvariantCultureIgnoreCase);
+        bool isOptionsMethod = listenerContext.Request.HttpMethod.Equals("OPTIONS", StringComparison.InvariantCultureIgnoreCase); // TODO: Handle better
         var handler = listenerContext.Request.HttpMethod.ToUpper() switch {
             "GET" => endpoint.GetMethod,
             "HEAD" => endpoint.GetMethod,
@@ -223,13 +237,10 @@ public sealed class AutumnHttpServer {
             _ => null
         };
         if (handler is null) {
-            listenerContext.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+            listenerContext.Response.StatusCode =  (int)(isOptionsMethod ? HttpStatusCode.OK : HttpStatusCode.MethodNotAllowed);
             listenerContext.Response.Close();
             return;
         }
-
-        // Add CORS headers
-        listenerContext.Response.Headers.Add("Access-Control-Allow-Origin", this._corsHeader);
 
         // Parse query
         var query = ParseQuery(requestUrl);

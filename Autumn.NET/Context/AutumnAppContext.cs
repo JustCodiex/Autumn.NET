@@ -1,9 +1,11 @@
 ﻿using System.Reflection;
+using System.Text;
 
 using Autumn.Annotations;
 using Autumn.Annotations.Internal;
 using Autumn.Context.Configuration;
 using Autumn.Context.Factory;
+using Autumn.Reflection;
 using Autumn.Types;
 
 namespace Autumn.Context;
@@ -71,6 +73,13 @@ public sealed class AutumnAppContext {
         }
         services.Add(qualifier, new() { creator });
     }
+
+    /// <summary>
+    /// Registers a component type to be resolved by the application context.
+    /// It associates the component with a factory responsible for creating its instances.
+    /// </summary>
+    /// <typeparam name="T">The type of the component to register</typeparam>
+    public void RegisterComponent<T>() => RegisterComponent(typeof(T));
 
     /// <summary>
     /// Registers a component type to be resolved by the application context.
@@ -186,7 +195,7 @@ public sealed class AutumnAppContext {
     /// </summary>
     /// <typeparam name="T">The type of the instance to retrieve</typeparam>
     /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
-    public T GetInstanceOf<T>() => GetInstanceOfInternal(typeof(T), Array.Empty<object>()) is T t ? t : throw new Exception();
+    public T GetInstanceOf<T>() => GetInstanceOfInternal(typeof(T), Array.Empty<object>()) is T t ? t : throw new ComponentNotFoundException(typeof(T));
 
     /// <summary>
     /// Retrieves an instance of the specified type from the application context.
@@ -194,12 +203,20 @@ public sealed class AutumnAppContext {
     /// <typeparam name="T">The type of the instance to retrieve</typeparam>
     /// <param name="constructorArguments">The arguments to pass on to the constructor.</param>
     /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
-    public T GetInstanceOf<T>(params object[] constructorArguments) => GetInstanceOfInternal(typeof(T), constructorArguments) is T t ? t : throw new Exception();
+    public T GetInstanceOf<T>(params object[] constructorArguments) => GetInstanceOfInternal(typeof(T), constructorArguments) is T t ? t : throw new ComponentNotFoundException(typeof(T));
+
+    private static bool IsSoughtAfterComponent(Type currentType, Type targetType) {
+        if (currentType == targetType)
+            return true;
+        if (targetType.IsInterface && currentType.IsAssignableTo(targetType))
+            return true;
+        return false;
+    }
 
     private object? GetInstanceOfInternal(Type type, object[] constructorArguments) {
 
         var key = ComponentIdentifier.DefaultIdentifier(type);
-        if (components.TryGetValue(key.ComponentQualifier, out var instance) && instance.FirstOrDefault(x => x.Type == type) is TypeCreator creator) {
+        if (components.TryGetValue(key.ComponentQualifier, out var instance) && instance.FirstOrDefault(x => IsSoughtAfterComponent(x.Type,type)) is TypeCreator creator) {
             return creator.Factory.GetComponent(key, constructorArguments, null);
         }
 
@@ -234,7 +251,7 @@ public sealed class AutumnAppContext {
         }
 
         // Create
-        var component = ctor.Invoke(callargs) ?? throw new Exception();
+        var component = ctor.Instantiate(callargs) ?? throw new Exception();
         constructed?.Invoke(component);
 
         // Initialise
@@ -258,7 +275,12 @@ public sealed class AutumnAppContext {
 
     }
 
-    private (ConstructorInfo?, object?[] callargs) GetConstructor(Type klass, InjectParameterHandler? injectHandler, object[] args, IScopeContext? scopeContext) {
+    private (ObjectInstantiator?, object?[] callargs) GetConstructor(Type klass, InjectParameterHandler? injectHandler, object[] args, IScopeContext? scopeContext) {
+
+        // Get factory constructor
+        if (GetFactoryClassConstructor(klass, injectHandler, args, scopeContext) is (FactoryInstantiator fi, object?[] factoryArgs)) {
+            return (fi, factoryArgs);
+        }
 
         // Get constructors
         var ctors = klass.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -291,15 +313,28 @@ public sealed class AutumnAppContext {
             }
         }
         if (candidates.Count is 1) {
-            return (candidates[0].Item1, candidates[0].Item2);
+            var ctorInfo = candidates[0].Item1;
+            return ctorInfo is not null ? ( new ConstructorInstantiator(ctorInfo), candidates[0].Item2) : (null, Array.Empty<object>());
         } else if (candidates.Count > 1) {
             var best = candidates[0];
             for (int i = 1; i < candidates.Count; i++) {
                 if (candidates[i].Item3 < best.Item3)
                     best = candidates[i];
             }
-            return (best.Item1, best.Item2); 
+            var ctorInfo = best.Item1;
+            return ctorInfo is not null ? (new ConstructorInstantiator(ctorInfo), best.Item2) : (null, Array.Empty<object>()); 
         }
+        return (null, Array.Empty<object>());
+
+    }
+
+    private static (ObjectInstantiator?, object?[]) GetFactoryClassConstructor(Type klass, InjectParameterHandler? injectHandler, object[] args, IScopeContext? scopeContext) {
+
+        var factories = klass.GetCustomAttributes<FactoryAttribute>().ToArray();
+        if (factories.Length > 0) {
+            throw new NotSupportedException("Factory classes not yet implemented");
+        }
+
         return (null, Array.Empty<object>());
 
     }
@@ -318,14 +353,18 @@ public sealed class AutumnAppContext {
 
     private object? GetComponent((string,Type) componentIdentifier, IScopeContext? scopeContext) {
         var identifier = new ComponentIdentifier(componentIdentifier.Item1, componentIdentifier.Item2);
+        return GetComponentInternal(identifier, scopeContext);
+    }
+
+    private object? GetComponentInternal(ComponentIdentifier identifier, IScopeContext? scopeContext) {
         if (singletonFactory.HasSingleton(identifier)) {
             return singletonFactory.GetComponent(identifier, Array.Empty<object>(), scopeContext);
         }
-        if (components.TryGetValue(componentIdentifier.Item1, out var typesByQualifier)) {
+        if (components.TryGetValue(identifier.ComponentQualifier, out var typesByQualifier)) {
             throw new NotImplementedException();
         }
-        if (components.TryGetValue(componentIdentifier.Item2.FullName!, out var typesByType)) {
-            var qualifiedByName = typesByType.Where(x => x.Type.Name == componentIdentifier.Item1).ToList();
+        if (components.TryGetValue(identifier.ComponentInstanceType.FullName!, out var typesByType)) {
+            var qualifiedByName = typesByType.Where(x => x.Type.Name == identifier.ComponentQualifier).ToList();
             if (qualifiedByName.Count == 1) {
                 return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type), Array.Empty<object>(), scopeContext);
             }
@@ -420,6 +459,7 @@ public sealed class AutumnAppContext {
     /// <param name="expectedType">The type of the dependency to resolve.</param>
     /// <param name="implicitQualifier">The implicit qualifier used for resolving the dependency.</param>
     /// <param name="inject">The InjectAttribute that specifies additional details for dependency resolution.</param>
+    /// <param name="scope">The scope context to consider while resolving the dependency.</param>
     /// <returns>The resolved dependency object if found; otherwise, null.</returns>
     internal object? SolveInjectDependency(Type expectedType, string implicitQualifier, InjectAttribute inject, IScopeContext? scope) 
         => SolveInjectDependencyInternal(expectedType, implicitQualifier, inject, scope);
@@ -436,6 +476,19 @@ public sealed class AutumnAppContext {
         if (!string.IsNullOrEmpty(inject.Qualifier)) {
             throw new NotImplementedException();
         }
+        if (inject.FactoryArguments is not null) {
+            ComponentIdentifier ci = new ComponentIdentifier(implicitQualifier + ArgsAsString(inject.FactoryArguments), expectedType);
+            if (singletonFactory.HasSingleton(ci)) { // TODO: Handle scopes at some point, right now it relies on it always being a singleton
+                return GetComponent((ci.ComponentQualifier, ci.ComponentInstanceType), scope);
+            }
+            var factoryMethod = GetFactoryMethod(expectedType, inject, scope);
+            if (factoryMethod is not null) {
+                var instance = factoryMethod.Invoke(null, inject.FactoryArguments) ?? throw new Exception("Fatal error while trying to invoke factory method");
+                singletonFactory.RegisterSingleton(ci, instance);
+                AssociateComponent(ci, new TypeCreator(expectedType, singletonFactory));
+                return instance;
+            }
+        }
         var byImplicitQualifier = (implicitQualifier, expectedType);
         if (!string.IsNullOrEmpty(implicitQualifier) && GetComponent(byImplicitQualifier, scope) is object component) {
             return component;
@@ -444,6 +497,31 @@ public sealed class AutumnAppContext {
             return fullyQualifiedComponent;
         }
         return null; // TODO: Check if null
+    }
+
+    private MethodInfo? GetFactoryMethod(Type expectedType, InjectAttribute inject, IScopeContext? scope) {
+        var factoryArgs = inject.FactoryArguments!;
+        var factoryMethods = expectedType.GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .Select(x => (x, x.GetCustomAttribute<FactoryMethodAttribute>()))
+            .Where(x => x.Item2 is not null)
+            .ToArray();
+        if (factoryMethods.Length == 0)
+            return null;
+
+        MethodInfo? bestFactoryMethod = null;
+        for (int i = 0; i < factoryMethods.Length; i++) {
+            var parameters = factoryMethods[i].x.GetParameters();
+            if (parameters.Length == factoryArgs.Length) {
+                bool isCandidate = true;
+                for (int j = 0; j < parameters.Length && isCandidate; j++) {
+                    var arg = factoryArgs[j];
+                    isCandidate &= (arg is null && !parameters[j].ParameterType.IsPrimitive) || (arg is not null && arg.GetType().IsAssignableTo(parameters[j].ParameterType));
+                }
+                if (isCandidate)
+                    bestFactoryMethod = factoryMethods[i].x;
+            }
+        }
+        return bestFactoryMethod;
     }
 
     /// <summary>
@@ -550,6 +628,42 @@ public sealed class AutumnAppContext {
             return GetComponentType(fullname); // Call ourselves again, there should now be an associated component!
         }
         throw new NotImplementedException("Unable to register type from typename - not implemented");
+    }
+
+    /// <summary>
+    /// Invokes the given method while injecting any required arguments
+    /// </summary>
+    /// <param name="instance">The instance to invoke the method on</param>
+    /// <param name="method">The method to invoke</param>
+    /// <returns>The value returned by the method</returns>
+    public object? Invoke(object? instance, MethodInfo method) => Invoke(instance, method, null);
+
+    /// <summary>
+    /// Invokes the given method while injecting any required arguments
+    /// </summary>
+    /// <param name="instance">The instance to invoke the method on</param>
+    /// <param name="method">The method to invoke</param>
+    /// <param name="scopeContext">The context to use when injecting parameters</param>
+    /// <returns>The value returned by the method</returns>
+    public object? Invoke(object? instance, MethodInfo method, IScopeContext? scopeContext) {
+        ParameterInfo[] parameters = method.GetParameters();
+        object?[] args = new object?[parameters.Length];
+        for (int i = 0; i < args.Length; i++) {
+            args[i] = SolveInjectDependencyInternal(parameters[i].ParameterType, parameters[i].Name!, parameters[i].GetCustomAttribute<InjectAttribute>() ?? new InjectAttribute(), scopeContext);
+        }
+        return method.Invoke(instance, args);
+    }
+
+    private static string ArgsAsString(object?[] args) { 
+        StringBuilder sb = new StringBuilder('[');
+        for (int i = 0; i < args.Length; i++) {
+            sb.Append(args[i]);
+            if (i + 1 < args.Length) {
+                sb.Append(',');
+            }
+        }
+        sb.Append(']');
+        return sb.ToString();
     }
 
 }

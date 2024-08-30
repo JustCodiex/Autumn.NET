@@ -56,7 +56,7 @@ public sealed class AutumnApplication {
         Type? declaringType = (frame.GetMethod()?.DeclaringType) ?? throw new InvalidProgramException();
 
         // Invoke private member
-        RunInternal(null, declaringType, args);
+        RunInternal(null, declaringType, null, args);
 
     }
 
@@ -66,7 +66,7 @@ public sealed class AutumnApplication {
     /// <param name="mainType">The type representing the entry point of the application.</param>
     /// <param name="args">The command-line arguments passed to the application.</param>
     public static void Run(Type mainType, params string[] args)
-        => RunInternal(null, mainType, args);
+        => RunInternal(null, mainType, null, args);
 
     /// <summary>
     /// Runs the Autumn application using the specified entry point type.
@@ -74,7 +74,7 @@ public sealed class AutumnApplication {
     /// <typeparam name="T">The type representing the entry point of the application.</typeparam>
     /// <param name="args">The command-line arguments passed to the application.</param>
     public static void Run<T>(params string[] args) 
-        => RunInternal(null, typeof(T), args);
+        => RunInternal(null, typeof(T), null, args);
 
     /// <summary>
     /// Runs the Autumn application using the specified entry point instance.
@@ -83,7 +83,7 @@ public sealed class AutumnApplication {
     /// <param name="main">The instance representing the entry point of the application.</param>
     /// <param name="args">The command-line arguments passed to the application.</param>
     public static void Run<T>(T main, params string[] args) where T : class
-        => RunInternal(main, typeof(T), args);
+        => RunInternal(main, typeof(T), null, args);
 
     /// <summary>
     /// Runs the Autumn application using the specified entry point instance.
@@ -91,9 +91,17 @@ public sealed class AutumnApplication {
     /// <param name="main">The instance representing the entry point of the application.</param>
     /// <param name="args">The command-line arguments passed to the application.</param>
     public static void Run(object main, params string[] args) 
-        => RunInternal(main, main.GetType(), args);
+        => RunInternal(main, main.GetType(), null, args);
 
-    private static void RunInternal(object? mainClass, Type mainClassType, params string[] args) {
+    /// <summary>
+    /// Runs the Autumn application using the specified entry point delegate.
+    /// </summary>
+    /// <param name="args">The command-line arguments passed to the application.</param>
+    /// <param name="entrypoint">The entry point to run</param>
+    public static void Run(string[] args, Action<AutumnAppContext> entrypoint)
+        => RunInternal(null, new StackFrame(1)!.GetMethod()!.DeclaringType!, entrypoint, args);
+
+    private static void RunInternal(object? mainClass, Type mainClassType, Action<AutumnAppContext>? entryPointAsAction, params string[] args) {
 
         // Create app
         AutumnApplication app = new AutumnApplication(mainClass);
@@ -120,8 +128,8 @@ public sealed class AutumnApplication {
         // Create containers
         List<(object, MethodInfo?, EndpointAttribute?)> endpointsServices = new();
         List<(object, MethodInfo?, ScheduledAttribute?)> scheduledServices = new();
-        object? entryPoint = mainClass;
-        MethodInfo? entryPointMethod = mainClassType.GetMethod("Start", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        object? entryPoint = entryPointAsAction?.Target ?? mainClass;
+        MethodInfo? entryPointMethod = entryPointAsAction?.GetMethodInfo() ?? mainClassType.GetMethod("Start", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
         // Loop over services
         var services = app.AppContext.GetServices();
@@ -212,8 +220,9 @@ public sealed class AutumnApplication {
             e.Cancel = app.ExitApplication();
         };
 
-        if (entryPoint is not null && entryPointMethod is not null) {
-            entryPointMethod.Invoke(entryPoint, Array.Empty<object>());
+        if (entryPointMethod is not null) {
+            app.AppContext.Invoke(entryPoint, entryPointMethod);
+            //entryPointMethod.Invoke(entryPoint, Array.Empty<object>());
         }
 
         // Join

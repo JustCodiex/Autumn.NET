@@ -9,7 +9,7 @@ namespace Autumn.Http.Sessions;
 /// <summary>
 /// Extended HTTP session manager for managing multiple sessions accross different paths on the HTTP server.
 /// </summary>
-public class AutumnHttpPathSessionManager : IHttpSessionManager { // TODO: Add support for parent/child sessions
+public sealed class AutumnHttpPathSessionManager : IHttpSessionManager { // TODO: Add support for parent/child sessions
 
     private record PathManager(string Path, string Manager);
 
