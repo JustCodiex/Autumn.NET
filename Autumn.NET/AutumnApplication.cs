@@ -19,7 +19,7 @@ public sealed class AutumnApplication {
     private record ShutdownListener(object Target, MethodInfo Method, ShutdownAttribute ShutdownAttribute);
 
     private static AutumnApplication? mainApp;
-    private static readonly List<AutumnApplication> activeApps = new();
+    private static readonly List<AutumnApplication> activeApps = [];
 
     /// <summary>
     /// Gets the main application instance.
@@ -40,8 +40,8 @@ public sealed class AutumnApplication {
 
     private AutumnApplication(object? main) {
         this.AppContext = new AutumnAppContext();
-        this.threads = new List<Thread>();
-        this.shutdownListeners = new List<ShutdownListener>();
+        this.threads = [];
+        this.shutdownListeners = [];
         this.main = main;
     }
 
@@ -126,8 +126,8 @@ public sealed class AutumnApplication {
         app.AppContext.RegisterComponent(cmdArgs);
 
         // Create containers
-        List<(object, MethodInfo?, EndpointAttribute?)> endpointsServices = new();
-        List<(object, MethodInfo?, ScheduledAttribute?)> scheduledServices = new();
+        List<(object, MethodInfo?, EndpointAttribute?)> endpointsServices = [];
+        List<(object, MethodInfo?, ScheduledAttribute?)> scheduledServices = [];
         object? entryPoint = entryPointAsAction?.Target ?? mainClass;
         MethodInfo? entryPointMethod = entryPointAsAction?.GetMethodInfo() ?? mainClassType.GetMethod("Start", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
@@ -140,7 +140,7 @@ public sealed class AutumnApplication {
                 .Select(x => (x, x.GetCustomAttribute<StartAttribute>()))
                 .Where(x => x.Item2 is not null);
             foreach (var (start, _) in starters) {
-                start.Invoke(service, Array.Empty<object>());
+                start.Invoke(service, []);
             }
             
             var endpoints = serviceKlass.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
@@ -222,7 +222,6 @@ public sealed class AutumnApplication {
 
         if (entryPointMethod is not null) {
             app.AppContext.Invoke(entryPoint, entryPointMethod);
-            //entryPointMethod.Invoke(entryPoint, Array.Empty<object>());
         }
 
         // Join
@@ -244,11 +243,11 @@ public sealed class AutumnApplication {
             if (loader is null) {
                 return;
             }
-            loader.Invoke(null, new object[] { mainKlassType, appContext, subTypes });
+            loader.Invoke(null, [mainKlassType, appContext, subTypes]);
         } else {
             var instance = Activator.CreateInstance(appLoader) ?? throw new Exception();
             appContext.InitialiseContextObject(instance, appLoader, null);
-            loader.Invoke(instance, new[] { mainKlass, appContext, subTypes });
+            loader.Invoke(instance, [mainKlass, appContext, subTypes]);
         }
 
     }
@@ -280,7 +279,7 @@ public sealed class AutumnApplication {
             if (handler.ShutdownAttribute.GracefulShutdownOnly && !wasGraceful) {
                 continue;
             }
-            handler.Method.Invoke(handler.Target, Array.Empty<object>());
+            handler.Method.Invoke(handler.Target, []);
         }
     }
 

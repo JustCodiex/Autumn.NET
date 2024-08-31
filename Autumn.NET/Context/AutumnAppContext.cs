@@ -110,9 +110,9 @@ public sealed class AutumnAppContext {
             return;
         }
         if (creator.Type.IsAbstract || creator.Type.IsInterface) {
-            components.Add(identifier.ComponentQualifier, new()); // Could go very bad if we tried to make an instance of an abstract/interface class
+            components.Add(identifier.ComponentQualifier, []); // Could go very bad if we tried to make an instance of an abstract/interface class
         } else {
-            components.Add(identifier.ComponentQualifier, new() { creator });
+            components.Add(identifier.ComponentQualifier, [creator]);
         }
     }
 
@@ -145,13 +145,13 @@ public sealed class AutumnAppContext {
     /// </summary>
     /// <returns>An array of registered service types.</returns>
     internal Type[] GetServices() {
-        HashSet<Type> services = new HashSet<Type>();
+        HashSet<Type> services = [];
         foreach (var (_, creators) in this.services) {
             foreach (var creator in creators) {
                 services.Add(creator.Type);
             }
         }
-        return services.ToArray();
+        return [.. services];
     }
 
     /// <summary>
@@ -180,7 +180,7 @@ public sealed class AutumnAppContext {
     /// </summary>
     /// <param name="type">The type of the instance to retrieve.</param>
     /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
-    public object? GetInstanceOf(Type type) => GetInstanceOfInternal(type, Array.Empty<object>());
+    public object? GetInstanceOf(Type type) => GetInstanceOfInternal(type, []);
 
     /// <summary>
     /// Retrieves an instance of the specified type from the application context.
@@ -195,7 +195,7 @@ public sealed class AutumnAppContext {
     /// </summary>
     /// <typeparam name="T">The type of the instance to retrieve</typeparam>
     /// <returns>The instance of the specified type, if found; otherwise, null.</returns>
-    public T GetInstanceOf<T>() => GetInstanceOfInternal(typeof(T), Array.Empty<object>()) is T t ? t : throw new ComponentNotFoundException(typeof(T));
+    public T GetInstanceOf<T>() => GetInstanceOfInternal(typeof(T), []) is T t ? t : throw new ComponentNotFoundException(typeof(T));
 
     /// <summary>
     /// Retrieves an instance of the specified type from the application context.
@@ -284,7 +284,7 @@ public sealed class AutumnAppContext {
 
         // Get constructors
         var ctors = klass.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        List<(ConstructorInfo?, object?[], int)> candidates = new();
+        List<(ConstructorInfo?, object?[], int)> candidates = [];
         foreach (var ctor in ctors) {
             var ctorArgs = ctor.GetParameters();
             if (ctor.GetCustomAttribute<InjectAttribute>() is not null) {

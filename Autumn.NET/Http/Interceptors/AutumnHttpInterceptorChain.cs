@@ -42,29 +42,23 @@ public sealed class AutumnHttpInterceptorChain : IHttpInterceptorChain {
     /// </summary>
     public AutumnHttpInterceptorChain() {
         var comparer = new DuplicateIndexComparer();
-        this.requestInterceptors = new(comparer);
-        this.responseInterceptors = new(comparer);
+        requestInterceptors = new(comparer);
+        responseInterceptors = new(comparer);
     }
 
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="interceptor"></param>
+    /// <inheritdoc/>
     public void AddInterceptor(IHttpRequestInterceptor interceptor) {
-        int order = GetOrder(interceptor.GetType(), this.requestInterceptors.LastOrDefault().Key + 1, t => this.responseInterceptors.IndexOfValue(this.responseInterceptors.FirstOrDefault(x => x.Value.GetType() == t).Value));
-        this.requestInterceptors.Add(order, interceptor);
+        int order = GetOrder(interceptor.GetType(), requestInterceptors.LastOrDefault().Key + 1, t => responseInterceptors.IndexOfValue(responseInterceptors.FirstOrDefault(x => x.Value.GetType() == t).Value));
+        requestInterceptors.Add(order, interceptor);
     }
 
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="interceptor"></param>
+    /// <inheritdoc/>
     public void AddInterceptor(IHttpResponseInterceptor interceptor) {
-        int order = GetOrder(interceptor.GetType(), this.responseInterceptors.LastOrDefault().Key + 1, t => this.responseInterceptors.IndexOfValue(this.responseInterceptors.FirstOrDefault(x => x.Value.GetType() == t).Value));
-        this.responseInterceptors.Add(order, interceptor);
+        int order = GetOrder(interceptor.GetType(), responseInterceptors.LastOrDefault().Key + 1, t => responseInterceptors.IndexOfValue(responseInterceptors.FirstOrDefault(x => x.Value.GetType() == t).Value));
+        responseInterceptors.Add(order, interceptor);
     }
 
-    private static int GetOrder(Type type, int lastIndex, Func<Type, int> indexOf) {
+    internal static int GetOrder(Type type, int lastIndex, Func<Type, int> indexOf) {
 
         int byOrderAttrib = OrderAttribute.GetOrder(type);
         if (byOrderAttrib >= 0)
@@ -74,19 +68,24 @@ public sealed class AutumnHttpInterceptorChain : IHttpInterceptorChain {
         if (before >= 0) 
             return before - 1;
 
-        int after = type.GetCustomAttribute<InterceptAfterAttribute>() is InterceptAfterAttribute interceptAfter ? indexOf(interceptAfter.InterceptAfter) : -1;
-        if (after >= 0) // TODO: Check interceptAfter.InterceptAfter != type
-            return after + 1;
+        if (type.GetCustomAttribute<InterceptAfterAttribute>() is InterceptAfterAttribute interceptAfter) {
+            int after = indexOf(interceptAfter.InterceptAfter);
+            if (after >= 0) {
+                bool canPutAfter = interceptAfter.InterceptAfter.GetCustomAttribute<InterceptBeforeAttribute>() is not InterceptBeforeAttribute targetBefore || targetBefore.InterceptBefore != type;
+                if (canPutAfter)
+                    return after + 1;
+            }
+        }
 
         return lastIndex;
 
     }
 
     /// <summary>
-    /// 
+    /// Add an interceptor to the interception chain.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="interceptor"></param>
+    /// <typeparam name="T">Type implementing <see cref="IHttpRequestInterceptor"/> and <see cref="IHttpResponseInterceptor"/>.</typeparam>
+    /// <param name="interceptor">The interceptor instance to add.</param>
     public void AddInterceptor<T>(T interceptor) where T : IHttpRequestInterceptor, IHttpResponseInterceptor {
         AddInterceptor((IHttpRequestInterceptor)interceptor);
         AddInterceptor((IHttpResponseInterceptor)interceptor);
@@ -95,7 +94,7 @@ public sealed class AutumnHttpInterceptorChain : IHttpInterceptorChain {
     /// <inheritdoc/>
     public bool OnRequest(IHttpRequest request, HttpListenerResponse response, IHttpSession? session) {
         bool hasHandled = true; // flag telling outer context if call should proceed
-        var it = this.requestInterceptors.GetEnumerator();
+        var it = requestInterceptors.GetEnumerator();
         while (it.MoveNext()) {
             IHttpRequestInterceptor interceptor = it.Current.Value;
             if (!interceptor.Intercept(request, session)) {
@@ -109,7 +108,7 @@ public sealed class AutumnHttpInterceptorChain : IHttpInterceptorChain {
     /// <inheritdoc/>
     public bool OnResponse(object responseObject, HttpListenerResponse response, IHttpSession? session, out object finalResponseObject) {
         finalResponseObject = responseObject;
-        var it = this.responseInterceptors.GetEnumerator();
+        var it = responseInterceptors.GetEnumerator();
         while (it.MoveNext()) { 
             IHttpResponseInterceptor interceptor = it.Current.Value;
             if (!interceptor.Intercept(finalResponseObject, response, session, out finalResponseObject)) { 
