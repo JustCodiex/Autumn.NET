@@ -5,7 +5,6 @@ using Autumn.Annotations;
 using Autumn.Annotations.Library;
 using Autumn.Context.Configuration;
 using Autumn.Functional;
-using Autumn.Http.Sessions;
 
 namespace Autumn.Context;
 
@@ -32,11 +31,11 @@ internal sealed class ContextLoader {
             .Prepend("application.yml").Prepend("application.yaml")
             .ToArray();
         this.configFactory = new();
-        this.templates = new();
-        this.templateImplementations = new();
-        this.libraryContextLoaders = new List<AutumnLibraryContextLoader>();
-        this.libraryAppLoaders = new List<AutumnLibraryAppLoader>();
-        this.scanNamespaces = new List<string>();
+        this.templates = [];
+        this.templateImplementations = [];
+        this.libraryContextLoaders = [];
+        this.libraryAppLoaders = [];
+        this.scanNamespaces = [];
     }
 
     internal void LoadAssemblyContext(AutumnAppContext appContext) {
@@ -86,12 +85,12 @@ internal sealed class ContextLoader {
 
     private void LoadAutumnAssemblies(HashSet<Assembly> loadedAssemblies) {
         // TODO: Add security checks here to verify these assemblies are loaded correctly and from a trusted source
-        string[] autumnAssemblyFiles = {
+        string[] autumnAssemblyFiles = [
             "Autumn.NET.Database.dll",
             "Autumn.NET.Database.*.dll", // Database specific implementations
             "Autumn.NET.WPF.dll"
-        };
-        HashSet<string> targetAssemblies = new HashSet<string>();
+        ];
+        HashSet<string> targetAssemblies = [];
         for (int i = 0; i < autumnAssemblyFiles.Length; i++) {
             if (autumnAssemblyFiles[i].Contains('*')) {
                 string[] candidates = Directory.GetFiles(Environment.CurrentDirectory, autumnAssemblyFiles[i]);
@@ -107,7 +106,7 @@ internal sealed class ContextLoader {
         }
 
         // Load autumn specific assemblies
-        HashSet<Assembly> autumnAssemblies = new HashSet<Assembly>();
+        HashSet<Assembly> autumnAssemblies = [];
         foreach (var targetAssembly in targetAssemblies) {
             if (loadedAssemblies.FirstOrDefault(x => x.Location == targetAssembly) is Assembly preloadedAssembly) { 
                 autumnAssemblies.Add(preloadedAssembly);
@@ -140,11 +139,11 @@ internal sealed class ContextLoader {
             }
             if (type.GetCustomAttribute<AutumnContextLoaderAttribute>() is AutumnContextLoaderAttribute autumnContextLoaderAttribute) {
                 MethodInfo? targetMethod = type.GetMethod("LoadContext", 
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic, 
-                    new Type[] { 
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    [
                         typeof(AutumnAppContext), 
                         typeof(IList<Type>) 
-                    });
+                    ]);
                 if (targetMethod is not null)
                     libraryContextLoaders.Add(new AutumnLibraryContextLoader(type, targetMethod.CreateDelegate<Action<AutumnAppContext, IList<Type>>>(), autumnContextLoaderAttribute));
             }
@@ -171,6 +170,9 @@ internal sealed class ContextLoader {
         // Load configs
         LoadConfiguration(context, configTypes);
 
+        // Load built-in types
+        LoadBuiltInTypes(context);
+
         // Load components
         LoadComponents(context, componentTypes);
 
@@ -184,10 +186,14 @@ internal sealed class ContextLoader {
 
     }
 
+    private void LoadBuiltInTypes(AutumnAppContext context) {
+        context.RegisterComponent(typeof(HttpClient));
+    }
+
     private void LoadConfiguration(AutumnAppContext context, IEnumerable<(Type, ConfigurationAttribute?)> configurationTypes) {
 
         // Load all sources
-        List<IConfigSource> sources = new List<IConfigSource>();
+        List<IConfigSource> sources = [];
 
         // Load applications
         for (int i = 0; i < propertySources.Length; i++) {
@@ -201,7 +207,7 @@ internal sealed class ContextLoader {
         }
 
         // Save
-        context.RegisterConfigSource(sources.ToArray());
+        context.RegisterConfigSource([.. sources]);
 
         // Instantiate 
         foreach (var (klass, configDesc) in configurationTypes) {
