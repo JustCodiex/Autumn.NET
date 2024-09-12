@@ -11,7 +11,7 @@
     <PackageProjectUrl>https://github.com/JustCodiex/Autumn.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/JustCodiex/Autumn.NET</RepositoryUrl>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
