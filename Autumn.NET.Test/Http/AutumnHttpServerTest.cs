@@ -1,6 +1,5 @@
 ﻿using System.Net;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
 
 using Autumn.Context;
@@ -19,8 +18,6 @@ public sealed class AutumnHttpServerTest : IDisposable {
     private static readonly Func<Dictionary<string, object?>> DefaultConfig = () => new Dictionary<string, object?>() {
         { "autumn.http.port", "8080" }
     };
-
-    private static readonly Func<string, StaticPropertySource> ConfigOf = x => (StaticPropertySource)(new ConfigFactory().LoadConfig("application.yaml", new MemoryStream(Encoding.UTF8.GetBytes(x))))!;
 
     private AutumnHttpServer? server;
 
@@ -238,7 +235,7 @@ public sealed class AutumnHttpServerTest : IDisposable {
                                       manager: Autumn.Http.Sessions.AutumnHttpSessionManager
                                       token-name: _sesh
             """;
-        var cfg = ConfigOf(cfgStr);
+        var cfg = ConfigHelper.ConfigOf(cfgStr);
 
         // Init context
         AutumnAppContext appContext = new AutumnAppContext();
@@ -330,7 +327,7 @@ public sealed class AutumnHttpServerTest : IDisposable {
                         interceptors:
                         -  {typeof(RequestResponse).FullName!}
             """;
-        var cfg = ConfigOf(cfgStr);
+        var cfg = ConfigHelper.ConfigOf(cfgStr);
 
         // Create RR
         var rr = new RequestResponse();

@@ -7,7 +7,7 @@
 public sealed class PostInitAttribute : Attribute {
     
     /// <summary>
-    /// Get or set if the post initialisation should happend within the a task.
+    /// Get or set if the post initialisation should execute within the context of an <see cref="Task"/>.
     /// </summary>
     public bool AsyncTask { get; set; } = false;
 

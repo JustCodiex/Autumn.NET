@@ -1,9 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Autumn.Annotations.Internal;
 
-namespace Autumn.Annotations.Internal;
-internal interface IInjectAnnotation {
-}
+internal interface IInjectAnnotation {}

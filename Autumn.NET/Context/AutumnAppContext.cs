@@ -163,6 +163,7 @@ public sealed class AutumnAppContext {
         ApplyValueAttribute(type, configuration, configSources);
         configurationInstances[type] = configuration;
         singletonFactory.RegisterSingleton(ComponentIdentifier.DefaultIdentifier(type), configuration);
+        components.Add(type.FullName!, [new TypeCreator(type, singletonFactory)]);
     }
 
     /// <summary>
@@ -301,7 +302,7 @@ public sealed class AutumnAppContext {
                 int j = 0;
                 for (int i = 0; i < callArgs.Length; i++) {
                     if (attributedArgs[i].Item2 is InjectAttribute inject) {
-                        callArgs[i] = SolveInjectDependencyInternal(attributedArgs[i].x.ParameterType, attributedArgs[i].x.Name!, inject, scopeContext);
+                        callArgs[i] = SolveInjectDependencyInternal(attributedArgs[i].x.ParameterType, attributedArgs[i].x.Name!, inject, scopeContext); // TODO: Make this lazy so we don't create unused dependencies
                     } else if (injectHandler is not null && attributedArgs[i].Item2 is IInjectAnnotation iij) {
                         var (found, value) = injectHandler(iij, attributedArgs[i].x);
                         callArgs[i] = found ? value : passArgs[j++];
@@ -363,7 +364,8 @@ public sealed class AutumnAppContext {
         if (components.TryGetValue(identifier.ComponentQualifier, out var typesByQualifier)) {
             throw new NotImplementedException();
         }
-        if (components.TryGetValue(identifier.ComponentInstanceType.FullName!, out var typesByType)) {
+        string typeQualifiedName = identifier.ComponentInstanceType.FullName!;
+        if (components.TryGetValue(typeQualifiedName, out var typesByType)) {
             var qualifiedByName = typesByType.Where(x => x.Type.Name == identifier.ComponentQualifier).ToList();
             if (qualifiedByName.Count == 1) {
                 return qualifiedByName[0].Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(qualifiedByName[0].Type), [], scopeContext);
@@ -372,6 +374,17 @@ public sealed class AutumnAppContext {
                 return typesByType.First().Factory.GetComponent(ComponentIdentifier.DefaultIdentifier(typesByType.First().Type), [], scopeContext);
             }
             throw new NotImplementedException();
+        }
+        if (identifier.ComponentInstanceType.IsGenericType) {
+            var updatedName = identifier.ComponentInstanceType.GetGenericTypeDefinition().FullName!;
+            if (components.TryGetValue(updatedName, out var genericTypes) && genericTypes.Count is 1) {
+                var first = genericTypes.First();
+                var specifiedInstance = first.Type.MakeGenericType(identifier.ComponentInstanceType.GenericTypeArguments);
+                var genericIdentifier = new ComponentIdentifier(specifiedInstance.FullName!, specifiedInstance);
+                var typeCreator = new TypeCreator(specifiedInstance, GetComponentFactory(specifiedInstance));
+                AssociateComponent(genericIdentifier, typeCreator);
+                return GetInstanceOf(specifiedInstance);
+            }
         }
         return null; // TODO: Chechk if null
     }
@@ -424,7 +437,7 @@ public sealed class AutumnAppContext {
     /// <param name="target">The object into which dependencies are to be injected.</param>
     /// <param name="targetType">The type of the target object.</param>
     /// <param name="scopeContext">The scope context, if any, associated with the target object.</param>
-    private void InjectDependencies(object target, Type targetType, IScopeContext? scopeContext) {
+    internal void InjectDependencies(object target, Type targetType, IScopeContext? scopeContext) {
 
         // Get properties
         var injectProperties = targetType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)

@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using System.Reflection.Emit;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Autumn.Proxying;
 
@@ -13,8 +12,11 @@ public static class Proxy {
         public object? HandleMethod(MethodInfo targetMethod, object?[] arguments) => handler(targetMethod, arguments);
     }
 
+    private static volatile int _proxyCounter = 0;
+
     private static readonly MethodInfo _proxyHandleMethod = typeof(IProxy).GetMethod(nameof(IProxy.HandleMethod), BindingFlags.Instance | BindingFlags.Public) ?? throw new InvalidProgramException("Expecteded method 'HandleMethod' not found");
     private static ModuleBuilder? _moduleBuilder;
+
     private static ModuleBuilder ProxyModule {
         get {
             if (_moduleBuilder is not null)
@@ -37,8 +39,8 @@ public static class Proxy {
 
         Type targetType = typeof(T);
 
-        if (!(targetType.IsInterface || targetType.IsAbstract))
-            throw new InvalidOperationException($"Invalid type argument T : {typeof(T)} must be an interface or abstract type");
+        if (!(targetType.IsInterface || targetType.IsAbstract || !targetType.IsSealed))
+            throw new InvalidOperationException($"Invalid type argument T : {typeof(T)} must be an interface, abstract, or unsealed type");
 
         if (!(targetType.IsPublic || targetType.IsNestedPublic))
             throw new InvalidOperationException("Cannot make a proxy of a non-public type");
@@ -63,13 +65,26 @@ public static class Proxy {
         return CreateProxy<T>(proxy);
     }
 
+    private static TypeBuilder GetTypeBuilder(Type targetType) {
+        var name = $"{targetType.Name}@Proxy#{_proxyCounter++}";
+        TypeBuilder typeBuilder;
+        if (targetType.IsInterface) {
+            typeBuilder = ProxyModule.DefineType(name, TypeAttributes.Public | TypeAttributes.Class);
+            typeBuilder.AddInterfaceImplementation(targetType);
+        } else {
+            typeBuilder = ProxyModule.DefineType(name, TypeAttributes.Public | TypeAttributes.Class, targetType);
+        }
+        return typeBuilder;
+    }
+
     private static object? CreateDynamicObject(Type proxyType, IProxy proxy) {
 
-        MethodInfo[] interfaceMethods = proxyType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+        MethodInfo[] interfaceMethods = proxyType.IsInterface
+            ? proxyType.GetMethods(BindingFlags.Public | BindingFlags.Instance).Union(proxyType.GetInterfaces().SelectMany(x => x.GetMethods(BindingFlags.Public | BindingFlags.Instance))).ToArray()
+            : proxyType.GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(x => x.DeclaringType == proxyType || x.IsAbstract).ToArray();
 
         // Define a new type that implements I
-        TypeBuilder typeBuilder = ProxyModule.DefineType(proxyType.Name+"@Proxy#"+proxy.GetHashCode(), TypeAttributes.Public);
-        typeBuilder.AddInterfaceImplementation(proxyType);
+        TypeBuilder typeBuilder = GetTypeBuilder(proxyType);
 
         // Define private proxy field
         FieldBuilder __proxy = typeBuilder.DefineField("__proxy", typeof(IProxy), FieldAttributes.Private);

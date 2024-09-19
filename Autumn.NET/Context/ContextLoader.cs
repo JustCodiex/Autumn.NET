@@ -5,6 +5,7 @@ using Autumn.Annotations;
 using Autumn.Annotations.Library;
 using Autumn.Context.Configuration;
 using Autumn.Functional;
+using Autumn.Remoting;
 
 namespace Autumn.Context;
 
@@ -188,6 +189,7 @@ internal sealed class ContextLoader {
 
     private void LoadBuiltInTypes(AutumnAppContext context) {
         context.RegisterComponent(typeof(HttpClient));
+        context.RegisterComponent(typeof(HttpRemoteService<>));
     }
 
     private void LoadConfiguration(AutumnAppContext context, IEnumerable<(Type, ConfigurationAttribute?)> configurationTypes) {
