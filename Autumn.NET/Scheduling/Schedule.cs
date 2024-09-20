@@ -9,16 +9,12 @@ namespace Autumn.Scheduling;
 /// </summary>
 public sealed class Schedule : ISchedule {
 
-    private readonly struct Field { 
-        public int[] Values { get; }
-        public ISet<int> ValuesSet { get; }
-        public Field(IList<int> values) {
-            this.Values = values.ToArray();
-            this.ValuesSet = new HashSet<int>(values);
-        }
+    private readonly struct Field(IList<int> values) {
+        public int[] Values { get; } = [.. values];
+        public ISet<int> ValuesSet { get; } = new HashSet<int>(values);
     }
 
-    private static readonly Field EverySecond = new Field(Enumerable.Range(0, 59).ToArray());
+    //private static readonly Field EverySecond = new Field(Enumerable.Range(0, 59).ToArray());
     private static readonly Field EveryMinute = new Field(Enumerable.Range(0, 59).ToArray());
     private static readonly Field EveryHour = new Field(Enumerable.Range(0, 23).ToArray());
     private static readonly Field EveryDayOfMonth = new Field(Enumerable.Range(1, 31).ToArray());
@@ -85,8 +81,8 @@ public sealed class Schedule : ISchedule {
         this.month = month;
     }
 
-    private Field ParseField(string field, int min, int max, params (string,int)[] valuemaps) {
-        List<int> entries = new List<int>();
+    private static Field ParseField(string field, int min, int max, params (string,int)[] valuemaps) {
+        List<int> entries = [];
         if (field == "*") {
             return new Field(Enumerable.Range(min, (max-min)+1).ToArray());
         }
@@ -121,7 +117,7 @@ public sealed class Schedule : ISchedule {
         return new Field(entries);
     }
 
-    private IEnumerable<int> ParseEveryNth(string first, string second, int min, int max) {
+    private static IEnumerable<int> ParseEveryNth(string first, string second, int min, int max) {
         if (!int.TryParse(second, out int step)) {
             throw new ArgumentException("Unable to parse field " + first + "/" + second + " since " + second + " is not a valid value");
         }
@@ -135,9 +131,9 @@ public sealed class Schedule : ISchedule {
         return Enumerable.Range(min, (max-min)+1).Where(x => x % step == 0);
     }
 
-    private int? ParseFieldValues(string field, (string, int)[] valuemaps) {
+    private static int? ParseFieldValues(string field, (string, int)[] valuemaps) {
         for (int j = 0; j < valuemaps.Length; j++) {
-            if (valuemaps[j].Item1 == field.ToLower()) {
+            if (valuemaps[j].Item1.Equals(field, StringComparison.CurrentCultureIgnoreCase)) {
                 return valuemaps[j].Item2;
             }
         }
@@ -175,7 +171,7 @@ public sealed class Schedule : ISchedule {
 
     }
 
-    private DateTime NextTimeUnitIfApplicable(DateTime t, Field field, Func<DateTime, int> getter, Func<DateTime, double, DateTime> adder, int resetValue, int offset = 0) {
+    private static DateTime NextTimeUnitIfApplicable(DateTime t, Field field, Func<DateTime, int> getter, Func<DateTime, double, DateTime> adder, int resetValue, int offset = 0) {
         int current = getter(t);
         int u = FirstGreaterThan(current, field.Values);
         if (u < 0) {
@@ -206,7 +202,7 @@ public sealed class Schedule : ISchedule {
         return t2;
     }
 
-    private int FirstGreaterThan(int k, int[] values) {
+    private static int FirstGreaterThan(int k, int[] values) {
         int i = Array.BinarySearch(values, k);
         if (i < 0) {
             i = ~i; // Invert to get index of next larger element
@@ -270,10 +266,13 @@ public sealed class Schedule : ISchedule {
         return true;
     }
 
+    /// <summary>
+    /// Get a schedule that executes every nth second
+    /// </summary>
+    /// <param name="seconds">The amount of seconds to pass between a scheduled event.</param>
+    /// <returns>A <see cref="Schedule"/> that should run every <paramref name="seconds"/>.</returns>
     public static Schedule EveryNthSecond(int seconds) {
-        if (seconds < 0) {
-            throw new ArgumentOutOfRangeException(nameof(seconds));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(seconds);
         Field everyNthSecond = new Field(Enumerable.Range(0, 59).Where(x => x % seconds == 0).ToArray());
         return new Schedule(everyNthSecond, EveryMinute, EveryHour, EveryDayOfMonth, EveryDayOfWeek, EveryMonth);
     }

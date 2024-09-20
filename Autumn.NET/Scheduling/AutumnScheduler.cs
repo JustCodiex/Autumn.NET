@@ -11,7 +11,7 @@ public sealed class AutumnScheduler {
     private record ScheduledMethod(ISchedule Schedule, object Target, MethodInfo MethodInfo) {
         public DateTime NextInvocation { get; set; }
         public async void Invoke() 
-            => await Task.Run(() => MethodInfo.Invoke(Target, Array.Empty<object>()));
+            => await Task.Run(() => MethodInfo.Invoke(Target, []));
     }
 
     private readonly List<ScheduledMethod> scheduledMethods;
@@ -22,7 +22,7 @@ public sealed class AutumnScheduler {
     /// Initializes a new instance of the <see cref="AutumnScheduler"/> class.
     /// </summary>
     public AutumnScheduler() {
-        this.scheduledMethods = new List<ScheduledMethod>();
+        this.scheduledMethods = [];
     }
 
     /// <summary>

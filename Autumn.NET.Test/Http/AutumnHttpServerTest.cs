@@ -172,7 +172,7 @@ public sealed class AutumnHttpServerTest : IDisposable {
 
         // Get http client and call our rendpoint
         var (client, cookies) = DefaultCookieHttpClient();
-        Assert.True(cookies.Count == 0);
+        Assert.Equal(0, cookies.Count);
         HttpResponseMessage response = client.Send(new HttpRequestMessage(HttpMethod.Post, "http://localhost:8080/counter"));
         StreamReader responseReader = new StreamReader(response.Content.ReadAsStream());
 
@@ -256,7 +256,7 @@ public sealed class AutumnHttpServerTest : IDisposable {
 
         // Get http client and call our rendpoint
         var (client, cookies) = DefaultCookieHttpClient();
-        Assert.True(cookies.Count == 0);
+        Assert.Equal(0, cookies.Count);
         HttpResponseMessage response = client.Send(new HttpRequestMessage(HttpMethod.Put, "http://localhost:8080/serviceA/counter"));
         StreamReader responseReader = new StreamReader(response.Content.ReadAsStream());
 
@@ -351,7 +351,7 @@ public sealed class AutumnHttpServerTest : IDisposable {
 
         // Get http client and call our rendpoint
         var (client, cookies) = DefaultCookieHttpClient();
-        Assert.True(cookies.Count == 0);
+        Assert.Equal(0, cookies.Count);
         HttpResponseMessage response = client.Send(new HttpRequestMessage(HttpMethod.Post, "http://localhost:8080/add") { 
             Content = new StringContent(JsonSerializer.Serialize(new CalculatorEndpoint.Payload { 
                 X = 5, 

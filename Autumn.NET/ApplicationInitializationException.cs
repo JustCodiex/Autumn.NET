@@ -3,7 +3,7 @@
 /// <summary>
 /// Exception thrown when the application or appContext is not properly initialized.
 /// </summary>
-public class ApplicationInitializationException : Exception {
+public class ApplicationInitializationException : AutumnException {
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ApplicationInitializationException"/> class.
