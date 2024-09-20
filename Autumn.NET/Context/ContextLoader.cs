@@ -55,6 +55,9 @@ internal sealed class ContextLoader {
                         continue;
                     }
                     assemblyDictionary.Add(refAssembly.FullName, referencedAssembly);
+                } catch (FileNotFoundException) {
+                    // TODO: Log?
+                    continue;
                 } catch {
                     throw;
                 }
